@@ -1,10 +1,10 @@
 // UCSC Penpals Backend Server
 // Handles email verification, notifications, and data storage
+// Uses JSONbin.io for persistent database storage
 
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-const fs = require('fs');
 require('dotenv').config();
 
 const app = express();
@@ -14,30 +14,86 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
-// Simple file-based database (use MongoDB/PostgreSQL for production scale)
-const DB_FILE = './database.json';
+// JSONbin.io configuration
+const JSONBIN_API_KEY = process.env.JSONBIN_API_KEY;
+const JSONBIN_BIN_ID = process.env.JSONBIN_BIN_ID;
+const JSONBIN_URL = `https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}`;
 
-function loadDB() {
-    try {
-        if (fs.existsSync(DB_FILE)) {
-            return JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
-        }
-    } catch (e) {
-        console.error('Error loading database:', e);
+// In-memory cache of database (to reduce API calls)
+let dbCache = null;
+let lastFetch = 0;
+const CACHE_TTL = 5000; // 5 seconds cache
+
+// Load database from JSONbin
+async function loadDB() {
+    const now = Date.now();
+    
+    // Return cache if still valid
+    if (dbCache && (now - lastFetch) < CACHE_TTL) {
+        return dbCache;
     }
-    return {
-        users: {},
-        pendingCodes: {},
-        messages: [],
-        matches: {}
-    };
+    
+    try {
+        const response = await fetch(JSONBIN_URL + '/latest', {
+            headers: {
+                'X-Master-Key': JSONBIN_API_KEY
+            }
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            dbCache = data.record;
+            lastFetch = now;
+            console.log('Database loaded from JSONbin');
+            return dbCache;
+        } else {
+            console.error('Failed to load from JSONbin:', response.status);
+            // Return default structure if load fails
+            return dbCache || {
+                users: {},
+                pendingCodes: {},
+                messages: [],
+                matches: {}
+            };
+        }
+    } catch (error) {
+        console.error('Error loading database:', error);
+        return dbCache || {
+            users: {},
+            pendingCodes: {},
+            messages: [],
+            matches: {}
+        };
+    }
 }
 
-function saveDB(db) {
-    fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
+// Save database to JSONbin
+async function saveDB(db) {
+    dbCache = db; // Update cache immediately
+    lastFetch = Date.now();
+    
+    try {
+        const response = await fetch(JSONBIN_URL, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Master-Key': JSONBIN_API_KEY
+            },
+            body: JSON.stringify(db)
+        });
+        
+        if (response.ok) {
+            console.log('Database saved to JSONbin');
+            return true;
+        } else {
+            console.error('Failed to save to JSONbin:', response.status);
+            return false;
+        }
+    } catch (error) {
+        console.error('Error saving database:', error);
+        return false;
+    }
 }
-
-let db = loadDB();
 
 // Admin email for notifications
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@ucscpenpals.com';
@@ -59,7 +115,7 @@ const emailTemplates = {
                     <img src="https://i.imgur.com/TTnGAdD.jpeg" alt="UCSC Penpals" width="80" height="80" style="display: block; margin: 0 auto; width: 80px; height: 80px; border-radius: 12px;">
                 </div>
                 <h1 style="color: #ffd54f; text-align: center; font-size: 24px; font-weight: 500;">Your Verification Code</h1>
-                <p style="text-align: center; color: rgba(255,255,255,0.8);">Enter this code to verify your UCSC email:</p>
+                <p style="text-align: center; color: rgba(255,255,255,0.8);">Enter this code to verify your email:</p>
                 <div style="background: #1a2332; padding: 20px; text-align: center; margin: 20px 0; border-radius: 4px; border: 1px solid #2a4a6f;">
                     <span style="font-size: 36px; font-family: monospace; letter-spacing: 8px; color: #ffd54f;">${code}</span>
                 </div>
@@ -79,7 +135,7 @@ const emailTemplates = {
                     <img src="https://i.imgur.com/TTnGAdD.jpeg" alt="UCSC Penpals" width="80" height="80" style="display: block; margin: 0 auto; width: 80px; height: 80px; border-radius: 12px;">
                 </div>
                 <h1 style="color: #ffd54f; text-align: center; font-size: 24px; font-weight: 500;">You've Been Matched!</h1>
-                <p style="text-align: center; color: rgba(255,255,255,0.8);">Great news! You've been paired with a fellow Banana Slug.</p>
+                <p style="text-align: center; color: rgba(255,255,255,0.8);">Great news! You've been paired with a penpal.</p>
                 <div style="background: #1a2332; padding: 20px; margin: 20px 0; border-radius: 4px; border: 1px solid #2a4a6f;">
                     <p style="color: #ffd54f; font-size: 14px; margin-bottom: 10px; letter-spacing: 1px;">Your Penpal's Introduction:</p>
                     <p style="color: rgba(255,255,255,0.9); line-height: 1.6; font-style: italic;">"${partnerIntro}"</p>
@@ -144,7 +200,6 @@ const emailTemplates = {
 async function sendEmail(to, template) {
     console.log(`Attempting to send email to: ${to}`);
     console.log(`Subject: ${template.subject}`);
-    console.log(`Using Resend API`);
     
     if (!RESEND_API_KEY) {
         console.error('ERROR: RESEND_API_KEY is not set!');
@@ -176,15 +231,11 @@ async function sendEmail(to, template) {
             console.error('==== RESEND API ERROR ====');
             console.error('Status:', response.status);
             console.error('Response:', data);
-            console.error('==========================');
             return false;
         }
     } catch (error) {
         console.error('==== EMAIL ERROR ====');
-        console.error('Error name:', error.name);
-        console.error('Error message:', error.message);
-        console.error('Full error:', error);
-        console.error('====================');
+        console.error('Error:', error.message);
         return false;
     }
 }
@@ -204,14 +255,17 @@ function scheduleDeliveryNotification(recipientEmail, deliveryTime) {
 }
 
 // On server start, reschedule any pending delivery notifications
-function reschedulePendingDeliveries() {
+async function reschedulePendingDeliveries() {
+    const db = await loadDB();
     const now = Date.now();
     
-    db.messages.forEach(msg => {
-        if (!msg.notificationSent && msg.deliveryTime > now) {
-            scheduleDeliveryNotification(msg.to, msg.deliveryTime);
-        }
-    });
+    if (db.messages) {
+        db.messages.forEach(msg => {
+            if (!msg.notificationSent && msg.deliveryTime > now) {
+                scheduleDeliveryNotification(msg.to, msg.deliveryTime);
+            }
+        });
+    }
     
     console.log('Rescheduled pending delivery notifications');
 }
@@ -228,11 +282,12 @@ app.post('/api/send-code', async (req, res) => {
 
     const code = Math.floor(100000 + Math.random() * 900000).toString();
     
+    const db = await loadDB();
     db.pendingCodes[email] = {
         code: code,
         timestamp: Date.now()
     };
-    saveDB(db);
+    await saveDB(db);
 
     const sent = await sendEmail(email, emailTemplates.verification(code));
     
@@ -244,10 +299,12 @@ app.post('/api/send-code', async (req, res) => {
 });
 
 // Verify code
-app.post('/api/verify-code', (req, res) => {
+app.post('/api/verify-code', async (req, res) => {
     const { email, code } = req.body;
     
+    const db = await loadDB();
     const pending = db.pendingCodes[email];
+    
     if (!pending || pending.code !== code) {
         return res.status(400).json({ error: 'Invalid verification code' });
     }
@@ -268,7 +325,7 @@ app.post('/api/verify-code', (req, res) => {
     }
 
     delete db.pendingCodes[email];
-    saveDB(db);
+    await saveDB(db);
 
     res.json({ 
         success: true, 
@@ -277,8 +334,9 @@ app.post('/api/verify-code', (req, res) => {
 });
 
 // Get user data
-app.get('/api/user/:email', (req, res) => {
+app.get('/api/user/:email', async (req, res) => {
     const { email } = req.params;
+    const db = await loadDB();
     const user = db.users[email];
     
     if (!user) {
@@ -292,6 +350,8 @@ app.get('/api/user/:email', (req, res) => {
 app.post('/api/submit-intro', async (req, res) => {
     const { email, intro } = req.body;
     
+    const db = await loadDB();
+    
     // Auto-create user if they don't exist (in case session was lost)
     if (!db.users[email]) {
         db.users[email] = {
@@ -304,7 +364,7 @@ app.post('/api/submit-intro', async (req, res) => {
     }
 
     db.users[email].intro = intro || '';
-    saveDB(db);
+    await saveDB(db);
 
     // Notify admin
     await sendEmail(ADMIN_EMAIL, emailTemplates.adminNewSignup(email, intro || '(No introduction provided)'));
@@ -313,8 +373,9 @@ app.post('/api/submit-intro', async (req, res) => {
 });
 
 // Get messages for a user
-app.get('/api/messages/:email', (req, res) => {
+app.get('/api/messages/:email', async (req, res) => {
     const { email } = req.params;
+    const db = await loadDB();
     const user = db.users[email];
     
     if (!user || !user.matched) {
@@ -339,6 +400,7 @@ app.get('/api/messages/:email', (req, res) => {
 // Send message
 app.post('/api/send-message', async (req, res) => {
     const { email, content } = req.body;
+    const db = await loadDB();
     const user = db.users[email];
     
     if (!user || !user.matched) {
@@ -360,7 +422,7 @@ app.post('/api/send-message', async (req, res) => {
     };
 
     db.messages.push(message);
-    saveDB(db);
+    await saveDB(db);
 
     // Schedule the delivery notification email for 12 hours from now
     scheduleDeliveryNotification(partnerId, deliveryTime);
@@ -369,8 +431,9 @@ app.post('/api/send-message', async (req, res) => {
 });
 
 // End conversation
-app.post('/api/end-conversation', (req, res) => {
+app.post('/api/end-conversation', async (req, res) => {
     const { email } = req.body;
+    const db = await loadDB();
     const user = db.users[email];
     
     if (!user) {
@@ -389,7 +452,7 @@ app.post('/api/end-conversation', (req, res) => {
         db.users[partnerId].intro = '';
     }
 
-    saveDB(db);
+    await saveDB(db);
     res.json({ success: true });
 });
 
@@ -404,12 +467,14 @@ app.post('/api/admin/login', (req, res) => {
     }
 });
 
-app.get('/api/admin/unmatched', (req, res) => {
+app.get('/api/admin/unmatched', async (req, res) => {
+    const db = await loadDB();
     const unmatched = Object.values(db.users).filter(u => !u.matched && u.intro);
     res.json({ users: unmatched });
 });
 
-app.get('/api/admin/matches', (req, res) => {
+app.get('/api/admin/matches', async (req, res) => {
+    const db = await loadDB();
     const matches = [];
     const processed = new Set();
 
@@ -439,8 +504,9 @@ app.get('/api/admin/matches', (req, res) => {
     res.json({ matches: matches.sort((a, b) => b.lastMessage - a.lastMessage) });
 });
 
-app.get('/api/admin/conversation/:email1/:email2', (req, res) => {
+app.get('/api/admin/conversation/:email1/:email2', async (req, res) => {
     const { email1, email2 } = req.params;
+    const db = await loadDB();
     
     const messages = db.messages.filter(m => 
         (m.from === email1 && m.to === email2) ||
@@ -452,6 +518,7 @@ app.get('/api/admin/conversation/:email1/:email2', (req, res) => {
 
 app.post('/api/admin/match', async (req, res) => {
     const { email1, email2 } = req.body;
+    const db = await loadDB();
     
     if (!db.users[email1] || !db.users[email2]) {
         return res.status(404).json({ error: 'User not found' });
@@ -465,7 +532,7 @@ app.post('/api/admin/match', async (req, res) => {
     db.users[email1].partnerId = email2;
     db.users[email2].matched = true;
     db.users[email2].partnerId = email1;
-    saveDB(db);
+    await saveDB(db);
 
     await sendEmail(email1, emailTemplates.matchNotification(db.users[email2].intro));
     await sendEmail(email2, emailTemplates.matchNotification(db.users[email1].intro));
@@ -474,23 +541,24 @@ app.post('/api/admin/match', async (req, res) => {
 });
 
 // Health check
-app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok', timestamp: Date.now() });
+app.get('/api/health', async (req, res) => {
+    const db = await loadDB();
+    res.json({ 
+        status: 'ok', 
+        timestamp: Date.now(),
+        userCount: Object.keys(db.users).length,
+        messageCount: db.messages.length
+    });
 });
 
 // TEST ENDPOINT - Send a test email to any address (REMOVE IN PRODUCTION)
 app.post('/api/test-email', async (req, res) => {
     console.log('==== TEST EMAIL REQUEST RECEIVED ====');
-    console.log('Request body:', req.body);
-    
     const { email } = req.body;
     
     if (!email) {
-        console.log('Error: No email provided');
         return res.status(400).json({ error: 'Email address required' });
     }
-
-    console.log(`Sending test email to: ${email}`);
 
     const testTemplate = {
         subject: 'Test Email - UCSC Penpals',
@@ -506,230 +574,85 @@ app.post('/api/test-email', async (req, res) => {
                     <p style="color: #ffd54f; font-size: 18px; margin: 0;">✅ Email system is operational</p>
                 </div>
                 <p style="text-align: center; color: rgba(255,255,255,0.6); font-size: 14px;">Sent at: ${new Date().toLocaleString()}</p>
-                <hr style="border: none; border-top: 1px solid #2a4a6f; margin: 20px 0;">
-                <p style="text-align: center; color: rgba(255,255,255,0.5); font-size: 12px;">UCSC Penpals - Connect with fellow Banana Slugs, one letter at a time!</p>
             </div>
         `
     };
 
     const sent = await sendEmail(email, testTemplate);
     
-    console.log(`Email send result: ${sent}`);
-    
     if (sent) {
         res.json({ success: true, message: `Test email sent to ${email}` });
     } else {
-        res.status(500).json({ error: 'Failed to send email. Check your RESEND_API_KEY environment variable.' });
+        res.status(500).json({ error: 'Failed to send email. Check your RESEND_API_KEY.' });
     }
 });
 
-// TEST PAGE - Simple HTML page to test emails (REMOVE IN PRODUCTION)
+// TEST PAGE
 app.get('/test', (req, res) => {
     res.send(`
         <!DOCTYPE html>
         <html>
         <head>
-            <title>UCSC Penpals - Email Test</title>
+            <title>UCSC Penpals - Test Panel</title>
             <style>
                 * { margin: 0; padding: 0; box-sizing: border-box; }
-                body {
-                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-                    background: #0a1929;
-                    color: #fff;
-                    min-height: 100vh;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    padding: 20px;
-                }
-                .container {
-                    background: #1a2332;
-                    padding: 40px;
-                    border-radius: 12px;
-                    max-width: 500px;
-                    width: 100%;
-                    border: 1px solid #2a4a6f;
-                }
-                h1 {
-                    color: #ffd54f;
-                    margin-bottom: 10px;
-                    font-size: 24px;
-                }
-                p {
-                    color: rgba(255,255,255,0.7);
-                    margin-bottom: 20px;
-                }
-                label {
-                    display: block;
-                    color: #ffd54f;
-                    margin-bottom: 8px;
-                    font-size: 14px;
-                }
-                input {
-                    width: 100%;
-                    padding: 12px 16px;
-                    border: 1px solid #2a4a6f;
-                    border-radius: 8px;
-                    background: #0a1929;
-                    color: #fff;
-                    font-size: 16px;
-                    margin-bottom: 20px;
-                }
-                input:focus {
-                    outline: none;
-                    border-color: #ffd54f;
-                }
-                button {
-                    width: 100%;
-                    padding: 14px;
-                    background: linear-gradient(135deg, #2196f3, #1565c0);
-                    color: #fff;
-                    border: none;
-                    border-radius: 8px;
-                    font-size: 16px;
-                    font-weight: 600;
-                    cursor: pointer;
-                    transition: transform 0.2s, box-shadow 0.2s;
-                }
-                button:hover {
-                    transform: translateY(-2px);
-                    box-shadow: 0 4px 20px rgba(33, 150, 243, 0.4);
-                }
-                button:disabled {
-                    background: #3a4a5a;
-                    cursor: not-allowed;
-                    transform: none;
-                    box-shadow: none;
-                }
-                .result {
-                    margin-top: 20px;
-                    padding: 16px;
-                    border-radius: 8px;
-                    display: none;
-                }
-                .result.success {
-                    background: rgba(76, 175, 80, 0.2);
-                    border: 1px solid #4caf50;
-                    color: #4caf50;
-                }
-                .result.error {
-                    background: rgba(244, 67, 54, 0.2);
-                    border: 1px solid #f44336;
-                    color: #f44336;
-                }
-                .config {
-                    margin-top: 30px;
-                    padding-top: 20px;
-                    border-top: 1px solid #2a4a6f;
-                }
-                .config h2 {
-                    color: #ffd54f;
-                    font-size: 16px;
-                    margin-bottom: 10px;
-                }
-                .config-item {
-                    display: flex;
-                    justify-content: space-between;
-                    padding: 8px 0;
-                    border-bottom: 1px solid rgba(255,255,255,0.1);
-                }
-                .config-item span:first-child {
-                    color: rgba(255,255,255,0.6);
-                }
-                .config-item span:last-child {
-                    color: #4caf50;
-                }
-                .warning {
-                    background: rgba(255, 152, 0, 0.2);
-                    border: 1px solid #ff9800;
-                    color: #ff9800;
-                    padding: 12px;
-                    border-radius: 8px;
-                    margin-bottom: 20px;
-                    font-size: 14px;
-                }
+                body { font-family: -apple-system, sans-serif; background: #0a1929; color: #fff; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
+                .container { background: #1a2332; padding: 40px; border-radius: 12px; max-width: 500px; width: 100%; border: 1px solid #2a4a6f; }
+                h1 { color: #ffd54f; margin-bottom: 10px; font-size: 24px; }
+                p { color: rgba(255,255,255,0.7); margin-bottom: 20px; }
+                label { display: block; color: #ffd54f; margin-bottom: 8px; font-size: 14px; }
+                input { width: 100%; padding: 12px 16px; border: 1px solid #2a4a6f; border-radius: 8px; background: #0a1929; color: #fff; font-size: 16px; margin-bottom: 20px; }
+                button { width: 100%; padding: 14px; background: linear-gradient(135deg, #2196f3, #1565c0); color: #fff; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; }
+                button:hover { transform: translateY(-2px); box-shadow: 0 4px 20px rgba(33, 150, 243, 0.4); }
+                .result { margin-top: 20px; padding: 16px; border-radius: 8px; display: none; }
+                .result.success { background: rgba(76, 175, 80, 0.2); border: 1px solid #4caf50; color: #4caf50; }
+                .result.error { background: rgba(244, 67, 54, 0.2); border: 1px solid #f44336; color: #f44336; }
+                .config { margin-top: 30px; padding-top: 20px; border-top: 1px solid #2a4a6f; }
+                .config h2 { color: #ffd54f; font-size: 16px; margin-bottom: 10px; }
+                .config-item { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.1); font-size: 14px; }
+                .config-item span:first-child { color: rgba(255,255,255,0.6); }
+                .config-item span:last-child { color: #4caf50; }
+                .warning { background: rgba(255, 152, 0, 0.2); border: 1px solid #ff9800; color: #ff9800; padding: 12px; border-radius: 8px; margin-bottom: 20px; font-size: 14px; }
             </style>
         </head>
         <body>
             <div class="container">
                 <h1>📧 Email Test Panel</h1>
-                <p>Test if your Resend email configuration is working correctly.</p>
-                
-                <div class="warning">
-                    ⚠️ This test page should be removed before going live!
-                </div>
-                
+                <p>Test if your email configuration is working correctly.</p>
+                <div class="warning">⚠️ Remove this test page before going live!</div>
                 <label>Send test email to:</label>
                 <input type="email" id="testEmail" placeholder="your-email@example.com">
-                <button onclick="sendTestEmail()" id="sendBtn">Send Test Email</button>
-                
+                <button onclick="sendTestEmail()">Send Test Email</button>
                 <div class="result" id="result"></div>
-                
                 <div class="config">
                     <h2>Current Configuration</h2>
-                    <div class="config-item">
-                        <span>Email Provider:</span>
-                        <span>Resend</span>
-                    </div>
-                    <div class="config-item">
-                        <span>Resend API Key:</span>
-                        <span>${RESEND_API_KEY ? '✓ Set' : '✗ Not set'}</span>
-                    </div>
-                    <div class="config-item">
-                        <span>From Address:</span>
-                        <span>${EMAIL_FROM}</span>
-                    </div>
-                    <div class="config-item">
-                        <span>Admin Email:</span>
-                        <span>${ADMIN_EMAIL}</span>
-                    </div>
-                    <div class="config-item">
-                        <span>Website URL:</span>
-                        <span>${WEBSITE_URL}</span>
-                    </div>
+                    <div class="config-item"><span>Database:</span><span>${JSONBIN_BIN_ID ? '✓ JSONbin connected' : '✗ Not configured'}</span></div>
+                    <div class="config-item"><span>Resend API:</span><span>${RESEND_API_KEY ? '✓ Set' : '✗ Not set'}</span></div>
+                    <div class="config-item"><span>From Address:</span><span>${EMAIL_FROM}</span></div>
+                    <div class="config-item"><span>Admin Email:</span><span>${ADMIN_EMAIL}</span></div>
                 </div>
             </div>
-            
             <script>
                 async function sendTestEmail() {
                     const email = document.getElementById('testEmail').value;
-                    const btn = document.getElementById('sendBtn');
                     const result = document.getElementById('result');
-                    
-                    if (!email) {
-                        alert('Please enter an email address');
-                        return;
-                    }
-                    
-                    btn.disabled = true;
-                    btn.textContent = 'Sending...';
+                    if (!email) { alert('Please enter an email'); return; }
                     result.style.display = 'none';
-                    
                     try {
                         const response = await fetch('/api/test-email', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ email })
                         });
-                        
                         const data = await response.json();
-                        
                         result.style.display = 'block';
-                        if (response.ok) {
-                            result.className = 'result success';
-                            result.textContent = '✓ ' + data.message;
-                        } else {
-                            result.className = 'result error';
-                            result.textContent = '✗ ' + data.error;
-                        }
+                        result.className = response.ok ? 'result success' : 'result error';
+                        result.textContent = response.ok ? '✓ ' + data.message : '✗ ' + data.error;
                     } catch (error) {
                         result.style.display = 'block';
                         result.className = 'result error';
-                        result.textContent = '✗ Network error: ' + error.message;
+                        result.textContent = '✗ Network error';
                     }
-                    
-                    btn.disabled = false;
-                    btn.textContent = 'Send Test Email';
                 }
             </script>
         </body>
@@ -738,11 +661,15 @@ app.get('/test', (req, res) => {
 });
 
 // Start server
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
     console.log(`UCSC Penpals server running on port ${PORT}`);
-    console.log(`Admin email: ${ADMIN_EMAIL}`);
-    console.log(`Using Resend for emails`);
+    console.log(`Using JSONbin.io for database storage`);
+    console.log(`JSONbin Bin ID: ${JSONBIN_BIN_ID ? 'Configured' : 'NOT SET'}`);
     console.log(`Resend API Key: ${RESEND_API_KEY ? 'Set' : 'NOT SET'}`);
     
-    reschedulePendingDeliveries();
+    // Load initial database
+    await loadDB();
+    
+    // Reschedule pending deliveries
+    await reschedulePendingDeliveries();
 });
