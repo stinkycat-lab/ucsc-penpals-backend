@@ -1,0 +1,467 @@
+// UCSC Penpals Backend Server
+// Handles email verification, notifications, and data storage
+
+const express = require('express');
+const cors = require('cors');
+const nodemailer = require('nodemailer');
+const path = require('path');
+const fs = require('fs');
+require('dotenv').config();
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// Middleware
+app.use(cors());
+app.use(express.json());
+
+// Simple file-based database (use MongoDB/PostgreSQL for production scale)
+const DB_FILE = './database.json';
+
+function loadDB() {
+    try {
+        if (fs.existsSync(DB_FILE)) {
+            return JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
+        }
+    } catch (e) {
+        console.error('Error loading database:', e);
+    }
+    return {
+        users: {},
+        pendingCodes: {},
+        messages: [],
+        matches: {}
+    };
+}
+
+function saveDB(db) {
+    fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
+}
+
+let db = loadDB();
+
+// Email configuration
+const transporter = nodemailer.createTransport({
+    service: process.env.EMAIL_SERVICE || 'gmail',
+    auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASSWORD
+    }
+});
+
+// Admin email for notifications
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || process.env.EMAIL_USER;
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
+const WEBSITE_URL = process.env.WEBSITE_URL || 'http://localhost:3000';
+
+// Email templates
+const emailTemplates = {
+    verification: (code) => ({
+        subject: 'Your Verification Code - UCSC Penpals',
+        html: `
+            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 500px; margin: 0 auto; padding: 30px; background: #0a1929; color: #ffffff; border-radius: 8px;">
+                <div style="text-align: center; margin-bottom: 20px;">
+                    <img src="https://i.imgur.com/HeS0J6I.png" alt="Slug" style="width: 60px; height: auto; margin-bottom: 10px;">
+                    <img src="https://i.imgur.com/TTnGAdD.jpeg" alt="UCSC Penpals" style="width: 80px; height: 80px; border-radius: 12px;">
+                </div>
+                <h1 style="color: #ffd54f; text-align: center; font-size: 24px; font-weight: 500;">Your Verification Code</h1>
+                <p style="text-align: center; color: rgba(255,255,255,0.8);">Enter this code to verify your UCSC email:</p>
+                <div style="background: #1a2332; padding: 20px; text-align: center; margin: 20px 0; border-radius: 4px; border: 1px solid #2a4a6f;">
+                    <span style="font-size: 36px; font-family: monospace; letter-spacing: 8px; color: #ffd54f;">${code}</span>
+                </div>
+                <p style="text-align: center; color: rgba(255,255,255,0.6); font-size: 14px;">This code expires in 15 minutes.</p>
+                <hr style="border: none; border-top: 1px solid #2a4a6f; margin: 20px 0;">
+                <p style="text-align: center; color: rgba(255,255,255,0.5); font-size: 12px;">UCSC Penpals - Connect with fellow Banana Slugs, one letter at a time!</p>
+            </div>
+        `
+    }),
+
+    matchNotification: (partnerIntro) => ({
+        subject: "You've Been Matched! - UCSC Penpals",
+        html: `
+            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 500px; margin: 0 auto; padding: 30px; background: #0a1929; color: #ffffff; border-radius: 8px;">
+                <div style="text-align: center; margin-bottom: 20px;">
+                    <img src="https://i.imgur.com/HeS0J6I.png" alt="Slug" style="width: 60px; height: auto; margin-bottom: 10px;">
+                    <img src="https://i.imgur.com/TTnGAdD.jpeg" alt="UCSC Penpals" style="width: 80px; height: 80px; border-radius: 12px;">
+                </div>
+                <h1 style="color: #ffd54f; text-align: center; font-size: 24px; font-weight: 500;">You've Been Matched!</h1>
+                <p style="text-align: center; color: rgba(255,255,255,0.8);">Great news! You've been paired with a fellow Banana Slug.</p>
+                <div style="background: #1a2332; padding: 20px; margin: 20px 0; border-radius: 4px; border: 1px solid #2a4a6f;">
+                    <p style="color: #ffd54f; font-size: 14px; margin-bottom: 10px; letter-spacing: 1px;">Your Penpal's Introduction:</p>
+                    <p style="color: rgba(255,255,255,0.9); line-height: 1.6; font-style: italic;">"${partnerIntro}"</p>
+                </div>
+                <div style="text-align: center; margin: 25px 0;">
+                    <a href="${WEBSITE_URL}" style="display: inline-block; padding: 14px 28px; background: linear-gradient(135deg, #2196f3 0%, #1565c0 100%); color: white; text-decoration: none; border-radius: 4px; font-weight: 500;">Write Your First Letter</a>
+                </div>
+                <p style="text-align: center; color: rgba(255,255,255,0.6); font-size: 14px;">Remember: Messages take 12 hours to deliver, just like real letters!</p>
+                <hr style="border: none; border-top: 1px solid #2a4a6f; margin: 20px 0;">
+                <p style="text-align: center; color: rgba(255,255,255,0.5); font-size: 12px;">UCSC Penpals - Connect with fellow Banana Slugs, one letter at a time!</p>
+            </div>
+        `
+    }),
+
+    messageDelivered: () => ({
+        subject: 'You Have a New Letter! - UCSC Penpals',
+        html: `
+            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 500px; margin: 0 auto; padding: 30px; background: #0a1929; color: #ffffff; border-radius: 8px;">
+                <div style="text-align: center; margin-bottom: 20px;">
+                    <img src="https://i.imgur.com/HeS0J6I.png" alt="Slug" style="width: 60px; height: auto; margin-bottom: 10px;">
+                    <img src="https://i.imgur.com/TTnGAdD.jpeg" alt="UCSC Penpals" style="width: 80px; height: 80px; border-radius: 12px;">
+                </div>
+                <h1 style="color: #ffd54f; text-align: center; font-size: 24px; font-weight: 500;">You Have a New Letter!</h1>
+                <p style="text-align: center; color: rgba(255,255,255,0.8);">Your penpal's message has arrived and is ready to read!</p>
+                <div style="background: #1a2332; padding: 20px; margin: 20px 0; border-radius: 4px; border: 1px solid #2a4a6f; text-align: center;">
+                    <p style="color: #ffd54f; font-size: 18px; margin: 0;">📬 A letter is waiting for you</p>
+                </div>
+                <div style="text-align: center; margin: 25px 0;">
+                    <a href="${WEBSITE_URL}" style="display: inline-block; padding: 14px 28px; background: linear-gradient(135deg, #2196f3 0%, #1565c0 100%); color: white; text-decoration: none; border-radius: 4px; font-weight: 500;">Read Your Letter</a>
+                </div>
+                <hr style="border: none; border-top: 1px solid #2a4a6f; margin: 20px 0;">
+                <p style="text-align: center; color: rgba(255,255,255,0.5); font-size: 12px;">UCSC Penpals - Connect with fellow Banana Slugs, one letter at a time!</p>
+            </div>
+        `
+    }),
+
+    adminNewSignup: (email, intro) => ({
+        subject: 'New User Signup - UCSC Penpals',
+        html: `
+            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 500px; margin: 0 auto; padding: 30px; background: #0a1929; color: #ffffff; border-radius: 8px;">
+                <div style="text-align: center; margin-bottom: 20px;">
+                    <img src="https://i.imgur.com/HeS0J6I.png" alt="Slug" style="width: 60px; height: auto; margin-bottom: 10px;">
+                    <img src="https://i.imgur.com/TTnGAdD.jpeg" alt="UCSC Penpals" style="width: 80px; height: 80px; border-radius: 12px;">
+                </div>
+                <h1 style="color: #ffd54f; text-align: center; font-size: 24px; font-weight: 500;">New User Waiting for Match</h1>
+                <div style="background: #1a2332; padding: 20px; margin: 20px 0; border-radius: 4px; border: 1px solid #2a4a6f;">
+                    <p style="color: #2196f3; font-size: 14px; margin-bottom: 5px; letter-spacing: 1px;">Email:</p>
+                    <p style="color: rgba(255,255,255,0.9); margin-bottom: 15px;">${email}</p>
+                    <p style="color: #ffd54f; font-size: 14px; margin-bottom: 5px; letter-spacing: 1px;">Introduction:</p>
+                    <p style="color: rgba(255,255,255,0.9); line-height: 1.6; font-style: italic;">"${intro}"</p>
+                </div>
+                <div style="text-align: center; margin: 25px 0;">
+                    <a href="${WEBSITE_URL}" style="display: inline-block; padding: 14px 28px; background: linear-gradient(135deg, #2196f3 0%, #1565c0 100%); color: white; text-decoration: none; border-radius: 4px; font-weight: 500;">Go to Admin Panel</a>
+                </div>
+                <p style="text-align: center; color: rgba(255,255,255,0.6); font-size: 14px;">Log in to match this user with a penpal.</p>
+            </div>
+        `
+    })
+};
+
+// Send email helper
+async function sendEmail(to, template) {
+    try {
+        await transporter.sendMail({
+            from: `"UCSC Penpals" <${process.env.EMAIL_USER}>`,
+            to: to,
+            subject: template.subject,
+            html: template.html
+        });
+        console.log(`Email sent to ${to}: ${template.subject}`);
+        return true;
+    } catch (error) {
+        console.error('Email error:', error);
+        return false;
+    }
+}
+
+// Schedule message delivery notification
+function scheduleDeliveryNotification(recipientEmail, deliveryTime) {
+    const delay = deliveryTime - Date.now();
+    
+    if (delay > 0) {
+        setTimeout(async () => {
+            // Send the delivery notification email
+            await sendEmail(recipientEmail, emailTemplates.messageDelivered());
+            console.log(`Delivery notification sent to ${recipientEmail}`);
+        }, delay);
+        
+        console.log(`Scheduled delivery notification for ${recipientEmail} in ${Math.round(delay / 1000 / 60)} minutes`);
+    }
+}
+
+// On server start, reschedule any pending delivery notifications
+function reschedulePendingDeliveries() {
+    const now = Date.now();
+    
+    db.messages.forEach(msg => {
+        if (!msg.notificationSent && msg.deliveryTime > now) {
+            scheduleDeliveryNotification(msg.to, msg.deliveryTime);
+        }
+    });
+    
+    console.log('Rescheduled pending delivery notifications');
+}
+
+// API Routes
+
+// Send verification code
+app.post('/api/send-code', async (req, res) => {
+    const { email } = req.body;
+    
+    if (!email || !email.endsWith('@ucsc.edu')) {
+        return res.status(400).json({ error: 'Must use a @ucsc.edu email address' });
+    }
+
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    
+    db.pendingCodes[email] = {
+        code: code,
+        timestamp: Date.now()
+    };
+    saveDB(db);
+
+    const sent = await sendEmail(email, emailTemplates.verification(code));
+    
+    if (sent) {
+        res.json({ success: true, message: 'Verification code sent' });
+    } else {
+        res.status(500).json({ error: 'Failed to send email' });
+    }
+});
+
+// Verify code
+app.post('/api/verify-code', (req, res) => {
+    const { email, code } = req.body;
+    
+    const pending = db.pendingCodes[email];
+    if (!pending || pending.code !== code) {
+        return res.status(400).json({ error: 'Invalid verification code' });
+    }
+
+    if (Date.now() - pending.timestamp > 15 * 60 * 1000) {
+        return res.status(400).json({ error: 'Code expired' });
+    }
+
+    // Create user if doesn't exist
+    if (!db.users[email]) {
+        db.users[email] = {
+            email: email,
+            intro: '',
+            matched: false,
+            partnerId: null,
+            createdAt: Date.now()
+        };
+    }
+
+    delete db.pendingCodes[email];
+    saveDB(db);
+
+    res.json({ 
+        success: true, 
+        user: db.users[email]
+    });
+});
+
+// Get user data
+app.get('/api/user/:email', (req, res) => {
+    const { email } = req.params;
+    const user = db.users[email];
+    
+    if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+    }
+
+    res.json({ user });
+});
+
+// Submit introduction
+app.post('/api/submit-intro', async (req, res) => {
+    const { email, intro } = req.body;
+    
+    if (!db.users[email]) {
+        return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (intro.length < 20) {
+        return res.status(400).json({ error: 'Introduction too short' });
+    }
+
+    db.users[email].intro = intro;
+    saveDB(db);
+
+    // Notify admin
+    await sendEmail(ADMIN_EMAIL, emailTemplates.adminNewSignup(email, intro));
+
+    res.json({ success: true });
+});
+
+// Get messages for a user
+app.get('/api/messages/:email', (req, res) => {
+    const { email } = req.params;
+    const user = db.users[email];
+    
+    if (!user || !user.matched) {
+        return res.json({ messages: [] });
+    }
+
+    const partnerId = user.partnerId;
+    const now = Date.now();
+
+    const messages = db.messages.filter(m => 
+        (m.from === email && m.to === partnerId) ||
+        (m.from === partnerId && m.to === email)
+    ).map(m => ({
+        ...m,
+        delivered: now >= m.deliveryTime,
+        // Hide content if not delivered and not from this user
+        content: (now >= m.deliveryTime || m.from === email) ? m.content : null
+    })).sort((a, b) => a.timestamp - b.timestamp);
+
+    res.json({ messages });
+});
+
+// Send message
+app.post('/api/send-message', async (req, res) => {
+    const { email, content } = req.body;
+    const user = db.users[email];
+    
+    if (!user || !user.matched) {
+        return res.status(400).json({ error: 'Not matched' });
+    }
+
+    if (content.length < 10) {
+        return res.status(400).json({ error: 'Message too short' });
+    }
+
+    const partnerId = user.partnerId;
+    const deliveryTime = Date.now() + (12 * 60 * 60 * 1000); // 12 hours
+
+    const message = {
+        id: Date.now().toString(),
+        from: email,
+        to: partnerId,
+        content: content,
+        timestamp: Date.now(),
+        deliveryTime: deliveryTime,
+        delivered: false,
+        notificationSent: false
+    };
+
+    db.messages.push(message);
+    saveDB(db);
+
+    // Schedule the delivery notification email for 12 hours from now
+    scheduleDeliveryNotification(partnerId, deliveryTime);
+
+    res.json({ success: true, message });
+});
+
+// End conversation
+app.post('/api/end-conversation', (req, res) => {
+    const { email } = req.body;
+    const user = db.users[email];
+    
+    if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+    }
+
+    const partnerId = user.partnerId;
+
+    db.users[email].matched = false;
+    db.users[email].partnerId = null;
+    db.users[email].intro = ''; // Reset intro so they can write a new one
+    
+    if (db.users[partnerId]) {
+        db.users[partnerId].matched = false;
+        db.users[partnerId].partnerId = null;
+        db.users[partnerId].intro = '';
+    }
+
+    saveDB(db);
+    res.json({ success: true });
+});
+
+// Admin routes
+app.post('/api/admin/login', (req, res) => {
+    const { password } = req.body;
+    
+    if (password === ADMIN_PASSWORD) {
+        res.json({ success: true });
+    } else {
+        res.status(401).json({ error: 'Invalid password' });
+    }
+});
+
+app.get('/api/admin/unmatched', (req, res) => {
+    const unmatched = Object.values(db.users).filter(u => !u.matched && u.intro);
+    res.json({ users: unmatched });
+});
+
+app.get('/api/admin/matches', (req, res) => {
+    const matches = [];
+    const processed = new Set();
+
+    Object.values(db.users).forEach(user => {
+        if (user.matched && user.partnerId) {
+            const pairKey = [user.email, user.partnerId].sort().join('|');
+            
+            if (!processed.has(pairKey)) {
+                processed.add(pairKey);
+                
+                const conversation = db.messages.filter(m => 
+                    (m.from === user.email && m.to === user.partnerId) ||
+                    (m.from === user.partnerId && m.to === user.email)
+                );
+
+                matches.push({
+                    user1: user.email,
+                    user2: user.partnerId,
+                    messageCount: conversation.length,
+                    lastMessage: conversation.length > 0 ? 
+                        Math.max(...conversation.map(m => m.timestamp)) : 0
+                });
+            }
+        }
+    });
+
+    res.json({ matches: matches.sort((a, b) => b.lastMessage - a.lastMessage) });
+});
+
+app.get('/api/admin/conversation/:email1/:email2', (req, res) => {
+    const { email1, email2 } = req.params;
+    
+    const messages = db.messages.filter(m => 
+        (m.from === email1 && m.to === email2) ||
+        (m.from === email2 && m.to === email1)
+    ).sort((a, b) => a.timestamp - b.timestamp);
+
+    res.json({ messages });
+});
+
+app.post('/api/admin/match', async (req, res) => {
+    const { email1, email2 } = req.body;
+    
+    if (!db.users[email1] || !db.users[email2]) {
+        return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (db.users[email1].matched || db.users[email2].matched) {
+        return res.status(400).json({ error: 'User already matched' });
+    }
+
+    // Match both users
+    db.users[email1].matched = true;
+    db.users[email1].partnerId = email2;
+    db.users[email2].matched = true;
+    db.users[email2].partnerId = email1;
+    saveDB(db);
+
+    // Send match notifications to both users
+    await sendEmail(email1, emailTemplates.matchNotification(db.users[email2].intro));
+    await sendEmail(email2, emailTemplates.matchNotification(db.users[email1].intro));
+
+    res.json({ success: true });
+});
+
+// Health check
+app.get('/api/health', (req, res) => {
+    res.json({ status: 'ok', timestamp: Date.now() });
+});
+
+// Start server
+app.listen(PORT, () => {
+    console.log(`UCSC Penpals server running on port ${PORT}`);
+    console.log(`Admin email: ${ADMIN_EMAIL}`);
+    
+    // Reschedule any pending delivery notifications
+    reschedulePendingDeliveries();
+});
