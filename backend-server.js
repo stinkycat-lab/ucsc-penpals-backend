@@ -457,6 +457,257 @@ app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', timestamp: Date.now() });
 });
 
+// TEST ENDPOINT - Send a test email to any address (REMOVE IN PRODUCTION)
+app.post('/api/test-email', async (req, res) => {
+    const { email } = req.body;
+    
+    if (!email) {
+        return res.status(400).json({ error: 'Email address required' });
+    }
+
+    const testTemplate = {
+        subject: 'Test Email - UCSC Penpals',
+        html: `
+            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 500px; margin: 0 auto; padding: 30px; background: #0a1929; color: #ffffff; border-radius: 8px;">
+                <div style="text-align: center; margin-bottom: 20px;">
+                    <img src="https://i.imgur.com/HeS0J6I.png" alt="Slug" style="width: 60px; height: auto; margin-bottom: 10px;">
+                    <img src="https://i.imgur.com/TTnGAdD.jpeg" alt="UCSC Penpals" style="width: 80px; height: 80px; border-radius: 12px;">
+                </div>
+                <h1 style="color: #ffd54f; text-align: center; font-size: 24px; font-weight: 500;">Test Email Successful!</h1>
+                <p style="text-align: center; color: rgba(255,255,255,0.8);">If you're seeing this, your email configuration is working correctly.</p>
+                <div style="background: #1a2332; padding: 20px; text-align: center; margin: 20px 0; border-radius: 4px; border: 1px solid #2a4a6f;">
+                    <p style="color: #ffd54f; font-size: 18px; margin: 0;">✅ Email system is operational</p>
+                </div>
+                <p style="text-align: center; color: rgba(255,255,255,0.6); font-size: 14px;">Sent at: ${new Date().toLocaleString()}</p>
+                <hr style="border: none; border-top: 1px solid #2a4a6f; margin: 20px 0;">
+                <p style="text-align: center; color: rgba(255,255,255,0.5); font-size: 12px;">UCSC Penpals - Connect with fellow Banana Slugs, one letter at a time!</p>
+            </div>
+        `
+    };
+
+    const sent = await sendEmail(email, testTemplate);
+    
+    if (sent) {
+        res.json({ success: true, message: `Test email sent to ${email}` });
+    } else {
+        res.status(500).json({ error: 'Failed to send email. Check your EMAIL_USER and EMAIL_PASSWORD environment variables.' });
+    }
+});
+
+// TEST PAGE - Simple HTML page to test emails (REMOVE IN PRODUCTION)
+app.get('/test', (req, res) => {
+    res.send(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>UCSC Penpals - Email Test</title>
+            <style>
+                * { margin: 0; padding: 0; box-sizing: border-box; }
+                body {
+                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                    background: #0a1929;
+                    color: #fff;
+                    min-height: 100vh;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    padding: 20px;
+                }
+                .container {
+                    background: #1a2332;
+                    padding: 40px;
+                    border-radius: 12px;
+                    max-width: 500px;
+                    width: 100%;
+                    border: 1px solid #2a4a6f;
+                }
+                h1 {
+                    color: #ffd54f;
+                    margin-bottom: 10px;
+                    font-size: 24px;
+                }
+                p {
+                    color: rgba(255,255,255,0.7);
+                    margin-bottom: 20px;
+                }
+                label {
+                    display: block;
+                    color: #ffd54f;
+                    margin-bottom: 8px;
+                    font-size: 14px;
+                }
+                input {
+                    width: 100%;
+                    padding: 12px 16px;
+                    border: 1px solid #2a4a6f;
+                    border-radius: 8px;
+                    background: #0a1929;
+                    color: #fff;
+                    font-size: 16px;
+                    margin-bottom: 20px;
+                }
+                input:focus {
+                    outline: none;
+                    border-color: #ffd54f;
+                }
+                button {
+                    width: 100%;
+                    padding: 14px;
+                    background: linear-gradient(135deg, #2196f3, #1565c0);
+                    color: #fff;
+                    border: none;
+                    border-radius: 8px;
+                    font-size: 16px;
+                    font-weight: 600;
+                    cursor: pointer;
+                    transition: transform 0.2s, box-shadow 0.2s;
+                }
+                button:hover {
+                    transform: translateY(-2px);
+                    box-shadow: 0 4px 20px rgba(33, 150, 243, 0.4);
+                }
+                button:disabled {
+                    background: #3a4a5a;
+                    cursor: not-allowed;
+                    transform: none;
+                    box-shadow: none;
+                }
+                .result {
+                    margin-top: 20px;
+                    padding: 16px;
+                    border-radius: 8px;
+                    display: none;
+                }
+                .result.success {
+                    background: rgba(76, 175, 80, 0.2);
+                    border: 1px solid #4caf50;
+                    color: #4caf50;
+                }
+                .result.error {
+                    background: rgba(244, 67, 54, 0.2);
+                    border: 1px solid #f44336;
+                    color: #f44336;
+                }
+                .config {
+                    margin-top: 30px;
+                    padding-top: 20px;
+                    border-top: 1px solid #2a4a6f;
+                }
+                .config h2 {
+                    color: #ffd54f;
+                    font-size: 16px;
+                    margin-bottom: 10px;
+                }
+                .config-item {
+                    display: flex;
+                    justify-content: space-between;
+                    padding: 8px 0;
+                    border-bottom: 1px solid rgba(255,255,255,0.1);
+                }
+                .config-item span:first-child {
+                    color: rgba(255,255,255,0.6);
+                }
+                .config-item span:last-child {
+                    color: #4caf50;
+                }
+                .warning {
+                    background: rgba(255, 152, 0, 0.2);
+                    border: 1px solid #ff9800;
+                    color: #ff9800;
+                    padding: 12px;
+                    border-radius: 8px;
+                    margin-bottom: 20px;
+                    font-size: 14px;
+                }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h1>📧 Email Test Panel</h1>
+                <p>Test if your email configuration is working correctly.</p>
+                
+                <div class="warning">
+                    ⚠️ This test page should be removed before going live!
+                </div>
+                
+                <label>Send test email to:</label>
+                <input type="email" id="testEmail" placeholder="your-email@example.com">
+                <button onclick="sendTestEmail()" id="sendBtn">Send Test Email</button>
+                
+                <div class="result" id="result"></div>
+                
+                <div class="config">
+                    <h2>Current Configuration</h2>
+                    <div class="config-item">
+                        <span>Email Service:</span>
+                        <span>${process.env.EMAIL_SERVICE || 'gmail'}</span>
+                    </div>
+                    <div class="config-item">
+                        <span>Email User:</span>
+                        <span>${process.env.EMAIL_USER ? '✓ Set' : '✗ Not set'}</span>
+                    </div>
+                    <div class="config-item">
+                        <span>Email Password:</span>
+                        <span>${process.env.EMAIL_PASSWORD ? '✓ Set' : '✗ Not set'}</span>
+                    </div>
+                    <div class="config-item">
+                        <span>Admin Email:</span>
+                        <span>${process.env.ADMIN_EMAIL || process.env.EMAIL_USER || 'Not set'}</span>
+                    </div>
+                    <div class="config-item">
+                        <span>Website URL:</span>
+                        <span>${process.env.WEBSITE_URL || 'Not set'}</span>
+                    </div>
+                </div>
+            </div>
+            
+            <script>
+                async function sendTestEmail() {
+                    const email = document.getElementById('testEmail').value;
+                    const btn = document.getElementById('sendBtn');
+                    const result = document.getElementById('result');
+                    
+                    if (!email) {
+                        alert('Please enter an email address');
+                        return;
+                    }
+                    
+                    btn.disabled = true;
+                    btn.textContent = 'Sending...';
+                    result.style.display = 'none';
+                    
+                    try {
+                        const response = await fetch('/api/test-email', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ email })
+                        });
+                        
+                        const data = await response.json();
+                        
+                        result.style.display = 'block';
+                        if (response.ok) {
+                            result.className = 'result success';
+                            result.textContent = '✓ ' + data.message;
+                        } else {
+                            result.className = 'result error';
+                            result.textContent = '✗ ' + data.error;
+                        }
+                    } catch (error) {
+                        result.style.display = 'block';
+                        result.className = 'result error';
+                        result.textContent = '✗ Network error: ' + error.message;
+                    }
+                    
+                    btn.disabled = false;
+                    btn.textContent = 'Send Test Email';
+                }
+            </script>
+        </body>
+        </html>
+    `);
+});
+
 // Start server
 app.listen(PORT, () => {
     console.log(`UCSC Penpals server running on port ${PORT}`);
