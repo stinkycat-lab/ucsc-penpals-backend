@@ -40,12 +40,17 @@ function saveDB(db) {
 
 let db = loadDB();
 
-// Email configuration
+// Email configuration - using explicit SMTP settings for better compatibility
 const transporter = nodemailer.createTransport({
-    service: process.env.EMAIL_SERVICE || 'gmail',
+    host: 'smtp.gmail.com',
+    port: 587,
+    secure: false, // true for 465, false for 587
     auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASSWORD
+    },
+    tls: {
+        rejectUnauthorized: false
     }
 });
 
