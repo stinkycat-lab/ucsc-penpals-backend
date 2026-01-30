@@ -55,8 +55,8 @@ const emailTemplates = {
         html: `
             <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 500px; margin: 0 auto; padding: 30px; background: #0a1929; color: #ffffff; border-radius: 8px;">
                 <div style="text-align: center; margin-bottom: 20px;">
-                    <img src="https://i.imgur.com/HeS0J6I.png" alt="Slug" style="width: 60px; height: auto; margin-bottom: 10px;">
-                    <img src="https://i.imgur.com/TTnGAdD.jpeg" alt="UCSC Penpals" style="width: 80px; height: 80px; border-radius: 12px;">
+                    <img src="https://i.imgur.com/HeS0J6I.png" alt="Slug" width="60" height="60" style="display: block; margin: 0 auto 10px auto; width: 60px; height: auto;">
+                    <img src="https://i.imgur.com/TTnGAdD.jpeg" alt="UCSC Penpals" width="80" height="80" style="display: block; margin: 0 auto; width: 80px; height: 80px; border-radius: 12px;">
                 </div>
                 <h1 style="color: #ffd54f; text-align: center; font-size: 24px; font-weight: 500;">Your Verification Code</h1>
                 <p style="text-align: center; color: rgba(255,255,255,0.8);">Enter this code to verify your UCSC email:</p>
@@ -75,8 +75,8 @@ const emailTemplates = {
         html: `
             <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 500px; margin: 0 auto; padding: 30px; background: #0a1929; color: #ffffff; border-radius: 8px;">
                 <div style="text-align: center; margin-bottom: 20px;">
-                    <img src="https://i.imgur.com/HeS0J6I.png" alt="Slug" style="width: 60px; height: auto; margin-bottom: 10px;">
-                    <img src="https://i.imgur.com/TTnGAdD.jpeg" alt="UCSC Penpals" style="width: 80px; height: 80px; border-radius: 12px;">
+                    <img src="https://i.imgur.com/HeS0J6I.png" alt="Slug" width="60" height="60" style="display: block; margin: 0 auto 10px auto; width: 60px; height: auto;">
+                    <img src="https://i.imgur.com/TTnGAdD.jpeg" alt="UCSC Penpals" width="80" height="80" style="display: block; margin: 0 auto; width: 80px; height: 80px; border-radius: 12px;">
                 </div>
                 <h1 style="color: #ffd54f; text-align: center; font-size: 24px; font-weight: 500;">You've Been Matched!</h1>
                 <p style="text-align: center; color: rgba(255,255,255,0.8);">Great news! You've been paired with a fellow Banana Slug.</p>
@@ -99,8 +99,8 @@ const emailTemplates = {
         html: `
             <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 500px; margin: 0 auto; padding: 30px; background: #0a1929; color: #ffffff; border-radius: 8px;">
                 <div style="text-align: center; margin-bottom: 20px;">
-                    <img src="https://i.imgur.com/HeS0J6I.png" alt="Slug" style="width: 60px; height: auto; margin-bottom: 10px;">
-                    <img src="https://i.imgur.com/TTnGAdD.jpeg" alt="UCSC Penpals" style="width: 80px; height: 80px; border-radius: 12px;">
+                    <img src="https://i.imgur.com/HeS0J6I.png" alt="Slug" width="60" height="60" style="display: block; margin: 0 auto 10px auto; width: 60px; height: auto;">
+                    <img src="https://i.imgur.com/TTnGAdD.jpeg" alt="UCSC Penpals" width="80" height="80" style="display: block; margin: 0 auto; width: 80px; height: 80px; border-radius: 12px;">
                 </div>
                 <h1 style="color: #ffd54f; text-align: center; font-size: 24px; font-weight: 500;">You Have a New Letter!</h1>
                 <p style="text-align: center; color: rgba(255,255,255,0.8);">Your penpal's message has arrived and is ready to read!</p>
@@ -121,8 +121,8 @@ const emailTemplates = {
         html: `
             <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 500px; margin: 0 auto; padding: 30px; background: #0a1929; color: #ffffff; border-radius: 8px;">
                 <div style="text-align: center; margin-bottom: 20px;">
-                    <img src="https://i.imgur.com/HeS0J6I.png" alt="Slug" style="width: 60px; height: auto; margin-bottom: 10px;">
-                    <img src="https://i.imgur.com/TTnGAdD.jpeg" alt="UCSC Penpals" style="width: 80px; height: 80px; border-radius: 12px;">
+                    <img src="https://i.imgur.com/HeS0J6I.png" alt="Slug" width="60" height="60" style="display: block; margin: 0 auto 10px auto; width: 60px; height: auto;">
+                    <img src="https://i.imgur.com/TTnGAdD.jpeg" alt="UCSC Penpals" width="80" height="80" style="display: block; margin: 0 auto; width: 80px; height: 80px; border-radius: 12px;">
                 </div>
                 <h1 style="color: #ffd54f; text-align: center; font-size: 24px; font-weight: 500;">New User Waiting for Match</h1>
                 <div style="background: #1a2332; padding: 20px; margin: 20px 0; border-radius: 4px; border: 1px solid #2a4a6f;">
@@ -296,15 +296,11 @@ app.post('/api/submit-intro', async (req, res) => {
         return res.status(404).json({ error: 'User not found' });
     }
 
-    if (intro.length < 20) {
-        return res.status(400).json({ error: 'Introduction too short' });
-    }
-
-    db.users[email].intro = intro;
+    db.users[email].intro = intro || '';
     saveDB(db);
 
     // Notify admin
-    await sendEmail(ADMIN_EMAIL, emailTemplates.adminNewSignup(email, intro));
+    await sendEmail(ADMIN_EMAIL, emailTemplates.adminNewSignup(email, intro || '(No introduction provided)'));
 
     res.json({ success: true });
 });
@@ -342,10 +338,6 @@ app.post('/api/send-message', async (req, res) => {
         return res.status(400).json({ error: 'Not matched' });
     }
 
-    if (content.length < 10) {
-        return res.status(400).json({ error: 'Message too short' });
-    }
-
     const partnerId = user.partnerId;
     const deliveryTime = Date.now() + (12 * 60 * 60 * 1000); // 12 hours
 
@@ -353,7 +345,7 @@ app.post('/api/send-message', async (req, res) => {
         id: Date.now().toString(),
         from: email,
         to: partnerId,
-        content: content,
+        content: content || '',
         timestamp: Date.now(),
         deliveryTime: deliveryTime,
         delivered: false,
@@ -498,8 +490,8 @@ app.post('/api/test-email', async (req, res) => {
         html: `
             <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 500px; margin: 0 auto; padding: 30px; background: #0a1929; color: #ffffff; border-radius: 8px;">
                 <div style="text-align: center; margin-bottom: 20px;">
-                    <img src="https://i.imgur.com/HeS0J6I.png" alt="Slug" style="width: 60px; height: auto; margin-bottom: 10px;">
-                    <img src="https://i.imgur.com/TTnGAdD.jpeg" alt="UCSC Penpals" style="width: 80px; height: 80px; border-radius: 12px;">
+                    <img src="https://i.imgur.com/HeS0J6I.png" alt="Slug" width="60" height="60" style="display: block; margin: 0 auto 10px auto; width: 60px; height: auto;">
+                    <img src="https://i.imgur.com/TTnGAdD.jpeg" alt="UCSC Penpals" width="80" height="80" style="display: block; margin: 0 auto; width: 80px; height: 80px; border-radius: 12px;">
                 </div>
                 <h1 style="color: #ffd54f; text-align: center; font-size: 24px; font-weight: 500;">Test Email Successful!</h1>
                 <p style="text-align: center; color: rgba(255,255,255,0.8);">If you're seeing this, your email configuration is working correctly.</p>
