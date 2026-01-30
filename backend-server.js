@@ -292,8 +292,15 @@ app.get('/api/user/:email', (req, res) => {
 app.post('/api/submit-intro', async (req, res) => {
     const { email, intro } = req.body;
     
+    // Auto-create user if they don't exist (in case session was lost)
     if (!db.users[email]) {
-        return res.status(404).json({ error: 'User not found' });
+        db.users[email] = {
+            email: email,
+            intro: '',
+            matched: false,
+            partnerId: null,
+            createdAt: Date.now()
+        };
     }
 
     db.users[email].intro = intro || '';
