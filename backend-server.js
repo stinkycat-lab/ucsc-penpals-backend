@@ -222,8 +222,8 @@ function reschedulePendingDeliveries() {
 app.post('/api/send-code', async (req, res) => {
     const { email } = req.body;
     
-    if (!email || !email.endsWith('@ucsc.edu')) {
-        return res.status(400).json({ error: 'Must use a @ucsc.edu email address' });
+    if (!email || !email.includes('@')) {
+        return res.status(400).json({ error: 'Please enter a valid email address' });
     }
 
     const code = Math.floor(100000 + Math.random() * 900000).toString();
