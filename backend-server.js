@@ -69,19 +69,28 @@ let db = loadDB();
 // ============================================================================
 
 const transporter = nodemailer.createTransport({
-    service: process.env.EMAIL_SERVICE || 'gmail',
+    host: 'smtp.gmail.com',
+    port: 587,
+    secure: false, // true for 465, false for other ports
     auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASSWORD
+    },
+    tls: {
+        rejectUnauthorized: false
     }
 });
 
 // Verify email configuration on startup
 transporter.verify(function(error, success) {
     if (error) {
-        console.error('Email configuration error:', error);
+        console.error('❌ Email configuration error:', error.message);
+        console.error('Please verify:');
+        console.error('1. 2FA is enabled on Gmail');
+        console.error('2. You are using an App Password (not regular password)');
+        console.error('3. App Password has no spaces');
     } else {
-        console.log('Email server is ready to send messages');
+        console.log('✅ Email server is ready to send messages');
     }
 });
 
