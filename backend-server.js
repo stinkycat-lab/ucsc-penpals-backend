@@ -148,17 +148,27 @@ const emailTemplates = {
 
 // Send email helper
 async function sendEmail(to, template) {
+    console.log(`Attempting to send email to: ${to}`);
+    console.log(`Subject: ${template.subject}`);
+    console.log(`Using EMAIL_USER: ${process.env.EMAIL_USER}`);
+    
     try {
-        await transporter.sendMail({
+        const info = await transporter.sendMail({
             from: `"UCSC Penpals" <${process.env.EMAIL_USER}>`,
             to: to,
             subject: template.subject,
             html: template.html
         });
-        console.log(`Email sent to ${to}: ${template.subject}`);
+        console.log(`Email sent successfully to ${to}`);
+        console.log(`Message ID: ${info.messageId}`);
         return true;
     } catch (error) {
-        console.error('Email error:', error);
+        console.error('==== EMAIL ERROR ====');
+        console.error('Error name:', error.name);
+        console.error('Error message:', error.message);
+        console.error('Error code:', error.code);
+        console.error('Full error:', error);
+        console.error('====================');
         return false;
     }
 }
@@ -459,11 +469,17 @@ app.get('/api/health', (req, res) => {
 
 // TEST ENDPOINT - Send a test email to any address (REMOVE IN PRODUCTION)
 app.post('/api/test-email', async (req, res) => {
+    console.log('==== TEST EMAIL REQUEST RECEIVED ====');
+    console.log('Request body:', req.body);
+    
     const { email } = req.body;
     
     if (!email) {
+        console.log('Error: No email provided');
         return res.status(400).json({ error: 'Email address required' });
     }
+
+    console.log(`Sending test email to: ${email}`);
 
     const testTemplate = {
         subject: 'Test Email - UCSC Penpals',
@@ -486,6 +502,8 @@ app.post('/api/test-email', async (req, res) => {
     };
 
     const sent = await sendEmail(email, testTemplate);
+    
+    console.log(`Email send result: ${sent}`);
     
     if (sent) {
         res.json({ success: true, message: `Test email sent to ${email}` });
