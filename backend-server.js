@@ -143,7 +143,7 @@ const emailTemplates = {
                 <div style="text-align: center; margin: 25px 0;">
                     <a href="${WEBSITE_URL}" style="display: inline-block; padding: 14px 28px; background: linear-gradient(135deg, #2196f3 0%, #1565c0 100%); color: white; text-decoration: none; border-radius: 4px; font-weight: 500;">Write Your First Letter</a>
                 </div>
-                <p style="text-align: center; color: rgba(255,255,255,0.6); font-size: 14px;">Remember: Messages take 12 hours to deliver, just like real letters!</p>
+                <p style="text-align: center; color: rgba(255,255,255,0.6); font-size: 14px;">Remember: Messages take 1 minute to deliver!</p>
                 <hr style="border: none; border-top: 1px solid #2a4a6f; margin: 20px 0;">
                 <p style="text-align: center; color: rgba(255,255,255,0.5); font-size: 12px;">UCSC Penpals - Connect with fellow Banana Slugs, one letter at a time!</p>
             </div>
@@ -408,7 +408,7 @@ app.post('/api/send-message', async (req, res) => {
     }
 
     const partnerId = user.partnerId;
-    const deliveryTime = Date.now() + (12 * 60 * 60 * 1000); // 12 hours
+    const deliveryTime = Date.now() + (1 * 60 * 1000); // 1 minute
 
     const message = {
         id: Date.now().toString(),
@@ -424,7 +424,7 @@ app.post('/api/send-message', async (req, res) => {
     db.messages.push(message);
     await saveDB(db);
 
-    // Schedule the delivery notification email for 12 hours from now
+    // Schedule the delivery notification email for 1 minute from now
     scheduleDeliveryNotification(partnerId, deliveryTime);
 
     res.json({ success: true, message });
