@@ -3,7 +3,6 @@
 
 const express = require('express');
 const cors = require('cors');
-const nodemailer = require('nodemailer');
 const path = require('path');
 const fs = require('fs');
 require('dotenv').config();
@@ -40,24 +39,14 @@ function saveDB(db) {
 
 let db = loadDB();
 
-// Email configuration - using explicit SMTP settings for better compatibility
-const transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 587,
-    secure: false, // true for 465, false for 587
-    auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASSWORD
-    },
-    tls: {
-        rejectUnauthorized: false
-    }
-});
-
 // Admin email for notifications
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL || process.env.EMAIL_USER;
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@ucscpenpals.com';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
 const WEBSITE_URL = process.env.WEBSITE_URL || 'http://localhost:3000';
+const RESEND_API_KEY = process.env.RESEND_API_KEY;
+
+// Email sender - use your verified domain or onboarding@resend.dev for testing
+const EMAIL_FROM = process.env.EMAIL_FROM || 'UCSC Penpals <onboarding@resend.dev>';
 
 // Email templates
 const emailTemplates = {
@@ -151,27 +140,49 @@ const emailTemplates = {
     })
 };
 
-// Send email helper
+// Send email using Resend API
 async function sendEmail(to, template) {
     console.log(`Attempting to send email to: ${to}`);
     console.log(`Subject: ${template.subject}`);
-    console.log(`Using EMAIL_USER: ${process.env.EMAIL_USER}`);
+    console.log(`Using Resend API`);
     
+    if (!RESEND_API_KEY) {
+        console.error('ERROR: RESEND_API_KEY is not set!');
+        return false;
+    }
+
     try {
-        const info = await transporter.sendMail({
-            from: `"UCSC Penpals" <${process.env.EMAIL_USER}>`,
-            to: to,
-            subject: template.subject,
-            html: template.html
+        const response = await fetch('https://api.resend.com/emails', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${RESEND_API_KEY}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                from: EMAIL_FROM,
+                to: to,
+                subject: template.subject,
+                html: template.html
+            })
         });
-        console.log(`Email sent successfully to ${to}`);
-        console.log(`Message ID: ${info.messageId}`);
-        return true;
+
+        const data = await response.json();
+        
+        if (response.ok) {
+            console.log(`Email sent successfully to ${to}`);
+            console.log(`Resend ID: ${data.id}`);
+            return true;
+        } else {
+            console.error('==== RESEND API ERROR ====');
+            console.error('Status:', response.status);
+            console.error('Response:', data);
+            console.error('==========================');
+            return false;
+        }
     } catch (error) {
         console.error('==== EMAIL ERROR ====');
         console.error('Error name:', error.name);
         console.error('Error message:', error.message);
-        console.error('Error code:', error.code);
         console.error('Full error:', error);
         console.error('====================');
         return false;
@@ -184,7 +195,6 @@ function scheduleDeliveryNotification(recipientEmail, deliveryTime) {
     
     if (delay > 0) {
         setTimeout(async () => {
-            // Send the delivery notification email
             await sendEmail(recipientEmail, emailTemplates.messageDelivered());
             console.log(`Delivery notification sent to ${recipientEmail}`);
         }, delay);
@@ -317,7 +327,6 @@ app.get('/api/messages/:email', (req, res) => {
     ).map(m => ({
         ...m,
         delivered: now >= m.deliveryTime,
-        // Hide content if not delivered and not from this user
         content: (now >= m.deliveryTime || m.from === email) ? m.content : null
     })).sort((a, b) => a.timestamp - b.timestamp);
 
@@ -373,7 +382,7 @@ app.post('/api/end-conversation', (req, res) => {
 
     db.users[email].matched = false;
     db.users[email].partnerId = null;
-    db.users[email].intro = ''; // Reset intro so they can write a new one
+    db.users[email].intro = '';
     
     if (db.users[partnerId]) {
         db.users[partnerId].matched = false;
@@ -453,14 +462,12 @@ app.post('/api/admin/match', async (req, res) => {
         return res.status(400).json({ error: 'User already matched' });
     }
 
-    // Match both users
     db.users[email1].matched = true;
     db.users[email1].partnerId = email2;
     db.users[email2].matched = true;
     db.users[email2].partnerId = email1;
     saveDB(db);
 
-    // Send match notifications to both users
     await sendEmail(email1, emailTemplates.matchNotification(db.users[email2].intro));
     await sendEmail(email2, emailTemplates.matchNotification(db.users[email1].intro));
 
@@ -513,7 +520,7 @@ app.post('/api/test-email', async (req, res) => {
     if (sent) {
         res.json({ success: true, message: `Test email sent to ${email}` });
     } else {
-        res.status(500).json({ error: 'Failed to send email. Check your EMAIL_USER and EMAIL_PASSWORD environment variables.' });
+        res.status(500).json({ error: 'Failed to send email. Check your RESEND_API_KEY environment variable.' });
     }
 });
 
@@ -647,7 +654,7 @@ app.get('/test', (req, res) => {
         <body>
             <div class="container">
                 <h1>📧 Email Test Panel</h1>
-                <p>Test if your email configuration is working correctly.</p>
+                <p>Test if your Resend email configuration is working correctly.</p>
                 
                 <div class="warning">
                     ⚠️ This test page should be removed before going live!
@@ -662,24 +669,24 @@ app.get('/test', (req, res) => {
                 <div class="config">
                     <h2>Current Configuration</h2>
                     <div class="config-item">
-                        <span>Email Service:</span>
-                        <span>${process.env.EMAIL_SERVICE || 'gmail'}</span>
+                        <span>Email Provider:</span>
+                        <span>Resend</span>
                     </div>
                     <div class="config-item">
-                        <span>Email User:</span>
-                        <span>${process.env.EMAIL_USER ? '✓ Set' : '✗ Not set'}</span>
+                        <span>Resend API Key:</span>
+                        <span>${RESEND_API_KEY ? '✓ Set' : '✗ Not set'}</span>
                     </div>
                     <div class="config-item">
-                        <span>Email Password:</span>
-                        <span>${process.env.EMAIL_PASSWORD ? '✓ Set' : '✗ Not set'}</span>
+                        <span>From Address:</span>
+                        <span>${EMAIL_FROM}</span>
                     </div>
                     <div class="config-item">
                         <span>Admin Email:</span>
-                        <span>${process.env.ADMIN_EMAIL || process.env.EMAIL_USER || 'Not set'}</span>
+                        <span>${ADMIN_EMAIL}</span>
                     </div>
                     <div class="config-item">
                         <span>Website URL:</span>
-                        <span>${process.env.WEBSITE_URL || 'Not set'}</span>
+                        <span>${WEBSITE_URL}</span>
                     </div>
                 </div>
             </div>
@@ -735,7 +742,8 @@ app.get('/test', (req, res) => {
 app.listen(PORT, () => {
     console.log(`UCSC Penpals server running on port ${PORT}`);
     console.log(`Admin email: ${ADMIN_EMAIL}`);
+    console.log(`Using Resend for emails`);
+    console.log(`Resend API Key: ${RESEND_API_KEY ? 'Set' : 'NOT SET'}`);
     
-    // Reschedule any pending delivery notifications
     reschedulePendingDeliveries();
 });
