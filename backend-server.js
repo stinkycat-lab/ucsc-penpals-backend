@@ -10,6 +10,24 @@ require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// ============================================================
+// EASY CONFIGURATION - Change these values as needed!
+// ============================================================
+
+// Message delivery delay - how long before messages are delivered
+// Examples:
+//   1 minute:  1 * 60 * 1000
+//   5 minutes: 5 * 60 * 1000
+//   1 hour:    1 * 60 * 60 * 1000
+//   12 hours:  12 * 60 * 60 * 1000
+//   24 hours:  24 * 60 * 60 * 1000
+const MESSAGE_DELIVERY_DELAY = 12 * 60 * 60 * 1000; // 12 hours (default)
+
+// Human-readable version for display in emails/UI
+const DELIVERY_TIME_TEXT = "12 hours";
+
+// ============================================================
+
 // Middleware
 app.use(cors());
 app.use(express.json());
@@ -143,7 +161,7 @@ const emailTemplates = {
                 <div style="text-align: center; margin: 25px 0;">
                     <a href="${WEBSITE_URL}" style="display: inline-block; padding: 14px 28px; background: linear-gradient(135deg, #2196f3 0%, #1565c0 100%); color: white; text-decoration: none; border-radius: 4px; font-weight: 500;">Write Your First Letter</a>
                 </div>
-                <p style="text-align: center; color: rgba(255,255,255,0.6); font-size: 14px;">Remember: Messages take 1 minute to deliver!</p>
+                <p style="text-align: center; color: rgba(255,255,255,0.6); font-size: 14px;">Remember: Messages take ${DELIVERY_TIME_TEXT} to deliver, just like real letters!</p>
                 <hr style="border: none; border-top: 1px solid #2a4a6f; margin: 20px 0;">
                 <p style="text-align: center; color: rgba(255,255,255,0.5); font-size: 12px;">UCSC Penpals - Connect with fellow Banana Slugs, one letter at a time!</p>
             </div>
@@ -276,8 +294,8 @@ async function reschedulePendingDeliveries() {
 app.post('/api/send-code', async (req, res) => {
     const { email } = req.body;
     
-    if (!email || !email.includes('@')) {
-        return res.status(400).json({ error: 'Please enter a valid email address' });
+    if (!email || !email.endsWith('@ucsc.edu')) {
+        return res.status(400).json({ error: 'Must use a @ucsc.edu email address' });
     }
 
     const code = Math.floor(100000 + Math.random() * 900000).toString();
@@ -408,7 +426,7 @@ app.post('/api/send-message', async (req, res) => {
     }
 
     const partnerId = user.partnerId;
-    const deliveryTime = Date.now() + (1 * 60 * 1000); // 1 minute
+    const deliveryTime = Date.now() + MESSAGE_DELIVERY_DELAY;
 
     const message = {
         id: Date.now().toString(),
@@ -424,7 +442,7 @@ app.post('/api/send-message', async (req, res) => {
     db.messages.push(message);
     await saveDB(db);
 
-    // Schedule the delivery notification email for 1 minute from now
+    // Schedule the delivery notification email
     scheduleDeliveryNotification(partnerId, deliveryTime);
 
     res.json({ success: true, message });
@@ -551,118 +569,10 @@ app.get('/api/health', async (req, res) => {
     });
 });
 
-// TEST ENDPOINT - Send a test email to any address (REMOVE IN PRODUCTION)
-app.post('/api/test-email', async (req, res) => {
-    console.log('==== TEST EMAIL REQUEST RECEIVED ====');
-    const { email } = req.body;
-    
-    if (!email) {
-        return res.status(400).json({ error: 'Email address required' });
-    }
-
-    const testTemplate = {
-        subject: 'Test Email - UCSC Penpals',
-        html: `
-            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 500px; margin: 0 auto; padding: 30px; background: #0a1929; color: #ffffff; border-radius: 8px;">
-                <div style="text-align: center; margin-bottom: 20px;">
-                    <img src="https://i.imgur.com/HeS0J6I.png" alt="Slug" width="60" height="60" style="display: block; margin: 0 auto 10px auto; width: 60px; height: auto;">
-                    <img src="https://i.imgur.com/TTnGAdD.jpeg" alt="UCSC Penpals" width="80" height="80" style="display: block; margin: 0 auto; width: 80px; height: 80px; border-radius: 12px;">
-                </div>
-                <h1 style="color: #ffd54f; text-align: center; font-size: 24px; font-weight: 500;">Test Email Successful!</h1>
-                <p style="text-align: center; color: rgba(255,255,255,0.8);">If you're seeing this, your email configuration is working correctly.</p>
-                <div style="background: #1a2332; padding: 20px; text-align: center; margin: 20px 0; border-radius: 4px; border: 1px solid #2a4a6f;">
-                    <p style="color: #ffd54f; font-size: 18px; margin: 0;">✅ Email system is operational</p>
-                </div>
-                <p style="text-align: center; color: rgba(255,255,255,0.6); font-size: 14px;">Sent at: ${new Date().toLocaleString()}</p>
-            </div>
-        `
-    };
-
-    const sent = await sendEmail(email, testTemplate);
-    
-    if (sent) {
-        res.json({ success: true, message: `Test email sent to ${email}` });
-    } else {
-        res.status(500).json({ error: 'Failed to send email. Check your RESEND_API_KEY.' });
-    }
-});
-
-// TEST PAGE
-app.get('/test', (req, res) => {
-    res.send(`
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>UCSC Penpals - Test Panel</title>
-            <style>
-                * { margin: 0; padding: 0; box-sizing: border-box; }
-                body { font-family: -apple-system, sans-serif; background: #0a1929; color: #fff; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
-                .container { background: #1a2332; padding: 40px; border-radius: 12px; max-width: 500px; width: 100%; border: 1px solid #2a4a6f; }
-                h1 { color: #ffd54f; margin-bottom: 10px; font-size: 24px; }
-                p { color: rgba(255,255,255,0.7); margin-bottom: 20px; }
-                label { display: block; color: #ffd54f; margin-bottom: 8px; font-size: 14px; }
-                input { width: 100%; padding: 12px 16px; border: 1px solid #2a4a6f; border-radius: 8px; background: #0a1929; color: #fff; font-size: 16px; margin-bottom: 20px; }
-                button { width: 100%; padding: 14px; background: linear-gradient(135deg, #2196f3, #1565c0); color: #fff; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; }
-                button:hover { transform: translateY(-2px); box-shadow: 0 4px 20px rgba(33, 150, 243, 0.4); }
-                .result { margin-top: 20px; padding: 16px; border-radius: 8px; display: none; }
-                .result.success { background: rgba(76, 175, 80, 0.2); border: 1px solid #4caf50; color: #4caf50; }
-                .result.error { background: rgba(244, 67, 54, 0.2); border: 1px solid #f44336; color: #f44336; }
-                .config { margin-top: 30px; padding-top: 20px; border-top: 1px solid #2a4a6f; }
-                .config h2 { color: #ffd54f; font-size: 16px; margin-bottom: 10px; }
-                .config-item { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.1); font-size: 14px; }
-                .config-item span:first-child { color: rgba(255,255,255,0.6); }
-                .config-item span:last-child { color: #4caf50; }
-                .warning { background: rgba(255, 152, 0, 0.2); border: 1px solid #ff9800; color: #ff9800; padding: 12px; border-radius: 8px; margin-bottom: 20px; font-size: 14px; }
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <h1>📧 Email Test Panel</h1>
-                <p>Test if your email configuration is working correctly.</p>
-                <div class="warning">⚠️ Remove this test page before going live!</div>
-                <label>Send test email to:</label>
-                <input type="email" id="testEmail" placeholder="your-email@example.com">
-                <button onclick="sendTestEmail()">Send Test Email</button>
-                <div class="result" id="result"></div>
-                <div class="config">
-                    <h2>Current Configuration</h2>
-                    <div class="config-item"><span>Database:</span><span>${JSONBIN_BIN_ID ? '✓ JSONbin connected' : '✗ Not configured'}</span></div>
-                    <div class="config-item"><span>Resend API:</span><span>${RESEND_API_KEY ? '✓ Set' : '✗ Not set'}</span></div>
-                    <div class="config-item"><span>From Address:</span><span>${EMAIL_FROM}</span></div>
-                    <div class="config-item"><span>Admin Email:</span><span>${ADMIN_EMAIL}</span></div>
-                </div>
-            </div>
-            <script>
-                async function sendTestEmail() {
-                    const email = document.getElementById('testEmail').value;
-                    const result = document.getElementById('result');
-                    if (!email) { alert('Please enter an email'); return; }
-                    result.style.display = 'none';
-                    try {
-                        const response = await fetch('/api/test-email', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ email })
-                        });
-                        const data = await response.json();
-                        result.style.display = 'block';
-                        result.className = response.ok ? 'result success' : 'result error';
-                        result.textContent = response.ok ? '✓ ' + data.message : '✗ ' + data.error;
-                    } catch (error) {
-                        result.style.display = 'block';
-                        result.className = 'result error';
-                        result.textContent = '✗ Network error';
-                    }
-                }
-            </script>
-        </body>
-        </html>
-    `);
-});
-
 // Start server
 app.listen(PORT, async () => {
     console.log(`UCSC Penpals server running on port ${PORT}`);
+    console.log(`Message delivery delay: ${DELIVERY_TIME_TEXT}`);
     console.log(`Using JSONbin.io for database storage`);
     console.log(`JSONbin Bin ID: ${JSONBIN_BIN_ID ? 'Configured' : 'NOT SET'}`);
     console.log(`Resend API Key: ${RESEND_API_KEY ? 'Set' : 'NOT SET'}`);
