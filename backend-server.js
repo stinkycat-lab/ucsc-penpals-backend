@@ -26,6 +26,13 @@ const MESSAGE_DELIVERY_DELAY = 12 * 60 * 60 * 1000; // 12 hours (default)
 // Human-readable version for display in emails/UI
 const DELIVERY_TIME_TEXT = "12 hours";
 
+// Allowed test emails (exceptions to @ucsc.edu requirement)
+// Add any non-ucsc.edu emails here for testing purposes
+const ALLOWED_TEST_EMAILS = [
+    // 'yourtestemail@gmail.com',
+    // 'another@example.com',
+];
+
 // ============================================================
 
 // Middleware
@@ -290,11 +297,24 @@ async function reschedulePendingDeliveries() {
 
 // API Routes
 
+// Helper function to check if email is allowed
+function isEmailAllowed(email) {
+    // Check if it's a @ucsc.edu email
+    if (email.endsWith('@ucsc.edu')) {
+        return true;
+    }
+    // Check if it's in the allowed test emails list
+    if (ALLOWED_TEST_EMAILS.includes(email.toLowerCase())) {
+        return true;
+    }
+    return false;
+}
+
 // Send verification code
 app.post('/api/send-code', async (req, res) => {
     const { email } = req.body;
     
-    if (!email || !email.endsWith('@ucsc.edu')) {
+    if (!email || !isEmailAllowed(email)) {
         return res.status(400).json({ error: 'Must use a @ucsc.edu email address' });
     }
 
