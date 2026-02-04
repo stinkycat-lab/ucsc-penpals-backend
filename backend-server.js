@@ -30,7 +30,7 @@ const DELIVERY_TIME_TEXT = "12 hours";
 // Add any non-ucsc.edu emails here for testing purposes
 const ALLOWED_TEST_EMAILS = [
     'stinkycat812@gmail.com',
-    // 'another@example.com',
+     'sigirek778@icubik.com',
 ];
 
 // ============================================================
