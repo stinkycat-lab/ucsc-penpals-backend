@@ -32,7 +32,7 @@ const ALLOWED_TEST_EMAILS = [
     'jchen06cali@gmail.com',
     'this.isnt.anything.good@gmail.com',
     'wohiho3275@muhaos.com',
-    'bonaw28326@muhaos.com',
+    'fivep41826@desiys.com',
      
 ];
 
@@ -166,12 +166,68 @@ const emailTemplates = {
                 <p style="text-align: center; color: rgba(255,255,255,0.8);">Great news! You've been paired with a penpal.</p>
                 <div style="background: #1a2332; padding: 20px; margin: 20px 0; border-radius: 4px; border: 1px solid #2a4a6f;">
                     <p style="color: #ffd54f; font-size: 14px; margin-bottom: 10px; letter-spacing: 1px;">Your Penpal's Introduction:</p>
-                    <p style="color: rgba(255,255,255,0.9); line-height: 1.6; font-style: italic;">"${partnerIntro}"</p>
+                    <p style="color: rgba(255,255,255,0.9); line-height: 1.6; font-style: italic;">"${partnerIntro || '(No introduction provided)'}"</p>
                 </div>
                 <div style="text-align: center; margin: 25px 0;">
                     <a href="${WEBSITE_URL}" style="display: inline-block; padding: 14px 28px; background: linear-gradient(135deg, #2196f3 0%, #1565c0 100%); color: white; text-decoration: none; border-radius: 4px; font-weight: 500;">Write Your First Letter</a>
                 </div>
                 <p style="text-align: center; color: rgba(255,255,255,0.6); font-size: 14px;">Remember: Messages take ${DELIVERY_TIME_TEXT} to deliver, just like real letters!</p>
+                <hr style="border: none; border-top: 1px solid #2a4a6f; margin: 20px 0;">
+                <p style="text-align: center; color: rgba(255,255,255,0.5); font-size: 12px;">UCSC Penpals - Connect with fellow Banana Slugs, one letter at a time!</p>
+            </div>
+        `
+    }),
+
+    // Email for the person who writes first
+    matchNotificationFirstSender: (partnerIntro) => ({
+        subject: "You've Been Matched! Write the First Letter ✉️ - UCSC Penpals",
+        html: `
+            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 500px; margin: 0 auto; padding: 30px; background: #0a1929; color: #ffffff; border-radius: 8px;">
+                <div style="text-align: center; margin-bottom: 20px;">
+                    <img src="https://i.imgur.com/HeS0J6I.png" alt="Slug" width="60" height="60" style="display: block; margin: 0 auto 10px auto; width: 60px; height: auto;">
+                    <img src="https://i.imgur.com/TTnGAdD.jpeg" alt="UCSC Penpals" width="80" height="80" style="display: block; margin: 0 auto; width: 80px; height: 80px; border-radius: 12px;">
+                </div>
+                <h1 style="color: #ffd54f; text-align: center; font-size: 24px; font-weight: 500;">You've Been Matched!</h1>
+                <p style="text-align: center; color: rgba(255,255,255,0.8);">Great news! You've been paired with a penpal.</p>
+                <div style="background: rgba(33, 150, 243, 0.15); padding: 15px; margin: 15px 0; border-radius: 4px; border: 1px solid #2196f3;">
+                    <p style="color: #2196f3; text-align: center; margin: 0; font-weight: 500;">✉️ You've been chosen to write the first letter!</p>
+                </div>
+                <div style="background: #1a2332; padding: 20px; margin: 20px 0; border-radius: 4px; border: 1px solid #2a4a6f;">
+                    <p style="color: #ffd54f; font-size: 14px; margin-bottom: 10px; letter-spacing: 1px;">Your Penpal's Introduction:</p>
+                    <p style="color: rgba(255,255,255,0.9); line-height: 1.6; font-style: italic;">"${partnerIntro || '(No introduction provided)'}"</p>
+                </div>
+                <div style="text-align: center; margin: 25px 0;">
+                    <a href="${WEBSITE_URL}" style="display: inline-block; padding: 14px 28px; background: linear-gradient(135deg, #2196f3 0%, #1565c0 100%); color: white; text-decoration: none; border-radius: 4px; font-weight: 500;">Write Your First Letter</a>
+                </div>
+                <p style="text-align: center; color: rgba(255,255,255,0.6); font-size: 14px;">Your penpal is waiting to hear from you! Messages take ${DELIVERY_TIME_TEXT} to deliver.</p>
+                <hr style="border: none; border-top: 1px solid #2a4a6f; margin: 20px 0;">
+                <p style="text-align: center; color: rgba(255,255,255,0.5); font-size: 12px;">UCSC Penpals - Connect with fellow Banana Slugs, one letter at a time!</p>
+            </div>
+        `
+    }),
+
+    // Email for the person who waits for the first letter
+    matchNotificationResponder: (partnerIntro) => ({
+        subject: "You've Been Matched! 📬 - UCSC Penpals",
+        html: `
+            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 500px; margin: 0 auto; padding: 30px; background: #0a1929; color: #ffffff; border-radius: 8px;">
+                <div style="text-align: center; margin-bottom: 20px;">
+                    <img src="https://i.imgur.com/HeS0J6I.png" alt="Slug" width="60" height="60" style="display: block; margin: 0 auto 10px auto; width: 60px; height: auto;">
+                    <img src="https://i.imgur.com/TTnGAdD.jpeg" alt="UCSC Penpals" width="80" height="80" style="display: block; margin: 0 auto; width: 80px; height: 80px; border-radius: 12px;">
+                </div>
+                <h1 style="color: #ffd54f; text-align: center; font-size: 24px; font-weight: 500;">You've Been Matched!</h1>
+                <p style="text-align: center; color: rgba(255,255,255,0.8);">Great news! You've been paired with a penpal.</p>
+                <div style="background: rgba(255, 213, 79, 0.15); padding: 15px; margin: 15px 0; border-radius: 4px; border: 1px solid #ffd54f;">
+                    <p style="color: #ffd54f; text-align: center; margin: 0; font-weight: 500;">📬 Your penpal will send the first letter - stay tuned!</p>
+                </div>
+                <div style="background: #1a2332; padding: 20px; margin: 20px 0; border-radius: 4px; border: 1px solid #2a4a6f;">
+                    <p style="color: #ffd54f; font-size: 14px; margin-bottom: 10px; letter-spacing: 1px;">Your Penpal's Introduction:</p>
+                    <p style="color: rgba(255,255,255,0.9); line-height: 1.6; font-style: italic;">"${partnerIntro || '(No introduction provided)'}"</p>
+                </div>
+                <div style="text-align: center; margin: 25px 0;">
+                    <a href="${WEBSITE_URL}" style="display: inline-block; padding: 14px 28px; background: linear-gradient(135deg, #2196f3 0%, #1565c0 100%); color: white; text-decoration: none; border-radius: 4px; font-weight: 500;">View Your Match</a>
+                </div>
+                <p style="text-align: center; color: rgba(255,255,255,0.6); font-size: 14px;">We'll notify you when your first letter arrives! Messages take ${DELIVERY_TIME_TEXT} to deliver.</p>
                 <hr style="border: none; border-top: 1px solid #2a4a6f; margin: 20px 0;">
                 <p style="text-align: center; color: rgba(255,255,255,0.5); font-size: 12px;">UCSC Penpals - Connect with fellow Banana Slugs, one letter at a time!</p>
             </div>
@@ -268,14 +324,25 @@ async function sendEmail(to, template) {
     }
 }
 
-// Schedule message delivery notification
-function scheduleDeliveryNotification(recipientEmail, deliveryTime) {
+// Schedule message delivery notification and enable recipient to reply
+function scheduleDeliveryNotification(recipientEmail, deliveryTime, enableSendForEmail = null) {
     const delay = deliveryTime - Date.now();
     
     if (delay > 0) {
         setTimeout(async () => {
+            // Send email notification
             await sendEmail(recipientEmail, emailTemplates.messageDelivered());
             console.log(`Delivery notification sent to ${recipientEmail}`);
+            
+            // Enable recipient to send a reply
+            if (enableSendForEmail) {
+                const db = await loadDB();
+                if (db.users[enableSendForEmail]) {
+                    db.users[enableSendForEmail].canSend = true;
+                    await saveDB(db);
+                    console.log(`Enabled sending for ${enableSendForEmail}`);
+                }
+            }
         }, delay);
         
         console.log(`Scheduled delivery notification for ${recipientEmail} in ${Math.round(delay / 1000 / 60)} minutes`);
@@ -451,6 +518,11 @@ app.post('/api/send-message', async (req, res) => {
         return res.status(400).json({ error: 'Not matched' });
     }
 
+    // Check if user is allowed to send
+    if (user.canSend === false) {
+        return res.status(400).json({ error: 'Please wait for your penpal to respond before sending another message' });
+    }
+
     const partnerId = user.partnerId;
     const deliveryTime = Date.now() + MESSAGE_DELIVERY_DELAY;
 
@@ -466,10 +538,14 @@ app.post('/api/send-message', async (req, res) => {
     };
 
     db.messages.push(message);
+    
+    // Disable sender from sending again until they receive a reply
+    db.users[email].canSend = false;
+    
     await saveDB(db);
 
-    // Schedule the delivery notification email
-    scheduleDeliveryNotification(partnerId, deliveryTime);
+    // Schedule the delivery notification AND enable recipient to reply
+    scheduleDeliveryNotification(partnerId, deliveryTime, partnerId);
 
     res.json({ success: true, message });
 });
@@ -563,7 +639,7 @@ app.get('/api/admin/conversation/:email1/:email2', async (req, res) => {
 });
 
 app.post('/api/admin/match', async (req, res) => {
-    const { email1, email2 } = req.body;
+    const { email1, email2, firstSender } = req.body;
     const db = await loadDB();
     
     if (!db.users[email1] || !db.users[email2]) {
@@ -574,14 +650,27 @@ app.post('/api/admin/match', async (req, res) => {
         return res.status(400).json({ error: 'User already matched' });
     }
 
-    db.users[email1].matched = true;
-    db.users[email1].partnerId = email2;
-    db.users[email2].matched = true;
-    db.users[email2].partnerId = email1;
+    // Determine who sends first (defaults to email1 if not specified)
+    const firstSenderEmail = firstSender || email1;
+    const responderEmail = firstSenderEmail === email1 ? email2 : email1;
+
+    // Set up first sender
+    db.users[firstSenderEmail].matched = true;
+    db.users[firstSenderEmail].partnerId = responderEmail;
+    db.users[firstSenderEmail].canSend = true;  // First sender CAN send
+    db.users[firstSenderEmail].isFirstSender = true;
+
+    // Set up responder
+    db.users[responderEmail].matched = true;
+    db.users[responderEmail].partnerId = firstSenderEmail;
+    db.users[responderEmail].canSend = false;  // Responder must wait
+    db.users[responderEmail].isFirstSender = false;
+
     await saveDB(db);
 
-    await sendEmail(email1, emailTemplates.matchNotification(db.users[email2].intro));
-    await sendEmail(email2, emailTemplates.matchNotification(db.users[email1].intro));
+    // Send different emails based on role
+    await sendEmail(firstSenderEmail, emailTemplates.matchNotificationFirstSender(db.users[responderEmail].intro));
+    await sendEmail(responderEmail, emailTemplates.matchNotificationResponder(db.users[firstSenderEmail].intro));
 
     res.json({ success: true });
 });
