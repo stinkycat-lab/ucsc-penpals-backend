@@ -31,6 +31,8 @@ const DELIVERY_TIME_TEXT = "12 hours";
 const ALLOWED_TEST_EMAILS = [
     'jchen06cali@gmail.com',
     'this.isnt.anything.good@gmail.com',
+    'wohiho3275@muhaos.com',
+    'bonaw28326@muhaos.com',
      
 ];
 
@@ -357,6 +359,7 @@ app.post('/api/verify-code', async (req, res) => {
         db.users[email] = {
             email: email,
             intro: '',
+            introSubmitted: false,
             matched: false,
             partnerId: null,
             createdAt: Date.now()
@@ -396,6 +399,7 @@ app.post('/api/submit-intro', async (req, res) => {
         db.users[email] = {
             email: email,
             intro: '',
+            introSubmitted: false,
             matched: false,
             partnerId: null,
             createdAt: Date.now()
@@ -403,6 +407,7 @@ app.post('/api/submit-intro', async (req, res) => {
     }
 
     db.users[email].intro = intro || '';
+    db.users[email].introSubmitted = true;
     await saveDB(db);
 
     // Notify admin
@@ -484,11 +489,13 @@ app.post('/api/end-conversation', async (req, res) => {
     db.users[email].matched = false;
     db.users[email].partnerId = null;
     db.users[email].intro = '';
+    db.users[email].introSubmitted = false;
     
     if (db.users[partnerId]) {
         db.users[partnerId].matched = false;
         db.users[partnerId].partnerId = null;
         db.users[partnerId].intro = '';
+        db.users[partnerId].introSubmitted = false;
     }
 
     await saveDB(db);
@@ -508,7 +515,7 @@ app.post('/api/admin/login', (req, res) => {
 
 app.get('/api/admin/unmatched', async (req, res) => {
     const db = await loadDB();
-    const unmatched = Object.values(db.users).filter(u => !u.matched && u.intro);
+    const unmatched = Object.values(db.users).filter(u => !u.matched && u.introSubmitted);
     res.json({ users: unmatched });
 });
 
