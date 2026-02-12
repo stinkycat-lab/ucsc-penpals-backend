@@ -21,18 +21,16 @@ const PORT = process.env.PORT || 3000;
 //   1 hour:    1 * 60 * 60 * 1000
 //   12 hours:  12 * 60 * 60 * 1000
 //   24 hours:  24 * 60 * 60 * 1000
-const MESSAGE_DELIVERY_DELAY = 1 * 60 * 1000; // 12 hours (default)
+const MESSAGE_DELIVERY_DELAY = 12 * 60 * 60 * 1000; // 12 hours (default)
 
 // Human-readable version for display in emails/UI
-const DELIVERY_TIME_TEXT = "1 minute";
+const DELIVERY_TIME_TEXT = "12 hours";
 
 // Allowed test emails (exceptions to @ucsc.edu requirement)
 // Add any non-ucsc.edu emails here for testing purposes
 const ALLOWED_TEST_EMAILS = [
     'jchen06cali@gmail.com',
     'this.isnt.anything.good@gmail.com',
-    'wohiho3275@muhaos.com',
-    'fivep41826@desiys.com',
      
 ];
 
@@ -476,9 +474,6 @@ app.post('/api/submit-intro', async (req, res) => {
     db.users[email].intro = intro || '';
     db.users[email].introSubmitted = true;
     await saveDB(db);
-
-    // Notify admin
-    await sendEmail(ADMIN_EMAIL, emailTemplates.adminNewSignup(email, intro || '(No introduction provided)'));
 
     res.json({ success: true });
 });
