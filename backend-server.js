@@ -21,7 +21,7 @@ const PORT = process.env.PORT || 3000;
 //   1 hour:    1 * 60 * 60 * 1000
 //   12 hours:  12 * 60 * 60 * 1000
 //   24 hours:  24 * 60 * 60 * 1000
-const MESSAGE_DELIVERY_DELAY = 1 * 60 * 1000; // 12 hours (default)
+const MESSAGE_DELIVERY_DELAY = 12 * 60 * 60 * 1000; // 12 hours (default)
 
 // Human-readable version for display in emails/UI
 const DELIVERY_TIME_TEXT = "12 hours";
@@ -31,7 +31,6 @@ const DELIVERY_TIME_TEXT = "12 hours";
 const ALLOWED_TEST_EMAILS = [
     'jchen06cali@gmail.com',
     'this.isnt.anything.good@gmail.com',
-    'cewaye5762@manupay.com',
 ];
 
 // ============================================================
