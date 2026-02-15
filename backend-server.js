@@ -31,6 +31,7 @@ const DELIVERY_TIME_TEXT = "12 hours";
 const ALLOWED_TEST_EMAILS = [
     'jchen06cali@gmail.com',
     'this.isnt.anything.good@gmail.com',
+    'wohiho3275@muhaos.com',
 ];
 
 // ============================================================
