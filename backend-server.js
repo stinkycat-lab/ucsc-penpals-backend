@@ -26,12 +26,19 @@ const MESSAGE_DELIVERY_DELAY = 12 * 60 * 60 * 1000; // 12 hours (default)
 // Human-readable version for display in emails/UI
 const DELIVERY_TIME_TEXT = "12 hours";
 
+// Inactivity reminder settings
+// How long without activity before sending a reminder (3 days)
+const INACTIVITY_THRESHOLD = 3 * 24 * 60 * 60 * 1000; // 3 days
+// How often to check for inactive users (check once per day)
+const REMINDER_CHECK_INTERVAL = 24 * 60 * 60 * 1000; // 24 hours
+// Minimum time between reminders to same user (7 days - don't spam them)
+const MIN_TIME_BETWEEN_REMINDERS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
 // Allowed test emails (exceptions to @ucsc.edu requirement)
 // Add any non-ucsc.edu emails here for testing purposes
 const ALLOWED_TEST_EMAILS = [
     'jchen06cali@gmail.com',
     'this.isnt.anything.good@gmail.com',
-    'wohiho3275@muhaos.com',
 ];
 
 // ============================================================
@@ -273,6 +280,34 @@ const emailTemplates = {
                     <a href="${WEBSITE_URL}" style="display: inline-block; padding: 14px 28px; background: linear-gradient(135deg, #2196f3 0%, #1565c0 100%); color: white; text-decoration: none; border-radius: 4px; font-weight: 500;">Go to Admin Panel</a>
                 </div>
                 <p style="text-align: center; color: rgba(255,255,255,0.6); font-size: 14px;">Log in to match this user with a penpal.</p>
+            </div>
+        `
+    }),
+
+    // Inactivity reminder email
+    inactivityReminder: () => ({
+        subject: "We Miss You! 📬 - UCSC Penpals",
+        html: `
+            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 500px; margin: 0 auto; padding: 30px; background: #0a1929; color: #ffffff; border-radius: 8px;">
+                <div style="text-align: center; margin-bottom: 20px;">
+                    <img src="https://i.imgur.com/HeS0J6I.png" alt="Slug" width="60" height="60" style="display: block; margin: 0 auto 10px auto; width: 60px; height: auto;">
+                    <img src="https://i.imgur.com/TTnGAdD.jpeg" alt="UCSC Penpals" width="80" height="80" style="display: block; margin: 0 auto; width: 80px; height: 80px; border-radius: 12px;">
+                </div>
+                <h1 style="color: #ffd54f; text-align: center; font-size: 24px; font-weight: 500;">We Miss You!</h1>
+                <p style="text-align: center; color: rgba(255,255,255,0.8);">It's been a little quiet between you and your penpal lately.</p>
+                <div style="background: #1a2332; padding: 20px; margin: 20px 0; border-radius: 4px; border: 1px solid #2a4a6f;">
+                    <p style="color: rgba(255,255,255,0.9); line-height: 1.6; text-align: center;">
+                        📨 Check if you have any messages waiting<br>
+                        ✉️ Send a letter to keep the conversation going<br>
+                        🔄 Or find a new penpal if things aren't clicking
+                    </p>
+                </div>
+                <div style="text-align: center; margin: 25px 0;">
+                    <a href="${WEBSITE_URL}" style="display: inline-block; padding: 14px 28px; background: linear-gradient(135deg, #2196f3 0%, #1565c0 100%); color: white; text-decoration: none; border-radius: 4px; font-weight: 500;">Check Your Messages</a>
+                </div>
+                <p style="text-align: center; color: rgba(255,255,255,0.6); font-size: 14px;">If you'd like a new penpal, you can end your current conversation and get rematched!</p>
+                <hr style="border: none; border-top: 1px solid #2a4a6f; margin: 20px 0;">
+                <p style="text-align: center; color: rgba(255,255,255,0.5); font-size: 12px;">UCSC Penpals - Connect with fellow Banana Slugs, one letter at a time!</p>
             </div>
         `
     })
@@ -649,17 +684,21 @@ app.post('/api/admin/match', async (req, res) => {
     const firstSenderEmail = firstSender || email1;
     const responderEmail = firstSenderEmail === email1 ? email2 : email1;
 
+    const matchedAt = Date.now();
+
     // Set up first sender
     db.users[firstSenderEmail].matched = true;
     db.users[firstSenderEmail].partnerId = responderEmail;
     db.users[firstSenderEmail].canSend = true;  // First sender CAN send
     db.users[firstSenderEmail].isFirstSender = true;
+    db.users[firstSenderEmail].matchedAt = matchedAt;
 
     // Set up responder
     db.users[responderEmail].matched = true;
     db.users[responderEmail].partnerId = firstSenderEmail;
     db.users[responderEmail].canSend = false;  // Responder must wait
     db.users[responderEmail].isFirstSender = false;
+    db.users[responderEmail].matchedAt = matchedAt;
 
     await saveDB(db);
 
@@ -681,10 +720,71 @@ app.get('/api/health', async (req, res) => {
     });
 });
 
+// Check for inactive users and send reminders
+async function checkAndSendReminders() {
+    console.log('Checking for inactive users...');
+    const db = await loadDB();
+    const now = Date.now();
+    let remindersSent = 0;
+
+    // Get all matched users
+    const matchedUsers = Object.values(db.users).filter(u => u.matched && u.partnerId);
+
+    for (const user of matchedUsers) {
+        const email = user.email;
+        const partnerId = user.partnerId;
+
+        // Get messages for this pair
+        const pairMessages = db.messages.filter(m =>
+            (m.from === email && m.to === partnerId) ||
+            (m.from === partnerId && m.to === email)
+        );
+
+        // Find the most recent activity (message sent or delivered)
+        let lastActivity = user.matchedAt || user.createdAt || 0;
+        
+        if (pairMessages.length > 0) {
+            const lastMessageTime = Math.max(...pairMessages.map(m => m.timestamp));
+            lastActivity = Math.max(lastActivity, lastMessageTime);
+        }
+
+        // Check if inactive for longer than threshold
+        const timeSinceActivity = now - lastActivity;
+        
+        if (timeSinceActivity > INACTIVITY_THRESHOLD) {
+            // Check if we already sent a reminder recently
+            const lastReminderSent = user.lastReminderSent || 0;
+            const timeSinceLastReminder = now - lastReminderSent;
+
+            if (timeSinceLastReminder > MIN_TIME_BETWEEN_REMINDERS) {
+                // Send reminder email
+                console.log(`Sending inactivity reminder to ${email} (inactive for ${Math.round(timeSinceActivity / (24 * 60 * 60 * 1000))} days)`);
+                
+                const sent = await sendEmail(email, emailTemplates.inactivityReminder());
+                
+                if (sent) {
+                    // Update lastReminderSent timestamp
+                    db.users[email].lastReminderSent = now;
+                    remindersSent++;
+                }
+            }
+        }
+    }
+
+    // Save updated reminder timestamps
+    if (remindersSent > 0) {
+        await saveDB(db);
+        console.log(`Sent ${remindersSent} inactivity reminder(s)`);
+    } else {
+        console.log('No inactive users need reminders');
+    }
+}
+
 // Start server
 app.listen(PORT, async () => {
     console.log(`UCSC Penpals server running on port ${PORT}`);
     console.log(`Message delivery delay: ${DELIVERY_TIME_TEXT}`);
+    console.log(`Inactivity reminder: after ${INACTIVITY_THRESHOLD / (24 * 60 * 60 * 1000)} days`);
     console.log(`Using JSONbin.io for database storage`);
     console.log(`JSONbin Bin ID: ${JSONBIN_BIN_ID ? 'Configured' : 'NOT SET'}`);
     console.log(`Resend API Key: ${RESEND_API_KEY ? 'Set' : 'NOT SET'}`);
@@ -694,4 +794,11 @@ app.listen(PORT, async () => {
     
     // Reschedule pending deliveries
     await reschedulePendingDeliveries();
+
+    // Start the inactivity reminder scheduler
+    console.log(`Starting inactivity reminder checker (runs every ${REMINDER_CHECK_INTERVAL / (60 * 60 * 1000)} hours)`);
+    setInterval(checkAndSendReminders, REMINDER_CHECK_INTERVAL);
+    
+    // Also run once on startup (after a short delay to let things initialize)
+    setTimeout(checkAndSendReminders, 60000); // Run 1 minute after startup
 });
