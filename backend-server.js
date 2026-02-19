@@ -39,6 +39,7 @@ const MIN_TIME_BETWEEN_REMINDERS = 7 * 24 * 60 * 60 * 1000; // 7 days
 const ALLOWED_TEST_EMAILS = [
     'jchen06cali@gmail.com',
     'this.isnt.anything.good@gmail.com',
+    'wohiho3275@muhaos.com',
 ];
 
 // ============================================================
@@ -592,16 +593,17 @@ app.post('/api/end-conversation', async (req, res) => {
 
     const partnerId = user.partnerId;
 
+    // Keep intro text but mark as not submitted (so they can review and resubmit)
     db.users[email].matched = false;
     db.users[email].partnerId = null;
-    db.users[email].intro = '';
     db.users[email].introSubmitted = false;
+    // intro stays - will pre-fill the box
     
     if (db.users[partnerId]) {
         db.users[partnerId].matched = false;
         db.users[partnerId].partnerId = null;
-        db.users[partnerId].intro = '';
         db.users[partnerId].introSubmitted = false;
+        // intro stays for partner too
     }
 
     await saveDB(db);
