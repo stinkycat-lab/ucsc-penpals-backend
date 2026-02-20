@@ -391,7 +391,8 @@ async function reschedulePendingDeliveries() {
     if (db.messages) {
         db.messages.forEach(msg => {
             if (!msg.notificationSent && msg.deliveryTime > now) {
-                scheduleDeliveryNotification(msg.to, msg.deliveryTime);
+                // Pass the recipient email so canSend gets enabled on delivery
+                scheduleDeliveryNotification(msg.to, msg.deliveryTime, msg.to);
             }
         });
     }
@@ -535,6 +536,26 @@ app.get('/api/messages/:email', async (req, res) => {
         delivered: now >= m.deliveryTime,
         content: (now >= m.deliveryTime || m.from === email) ? m.content : null
     })).sort((a, b) => a.timestamp - b.timestamp);
+
+    // Auto-fix canSend status: if user received a delivered message and can't send, enable them
+    const deliveredToUser = messages.filter(m => m.to === email && m.delivered);
+    const sentByUser = messages.filter(m => m.from === email);
+    
+    if (deliveredToUser.length > 0) {
+        // Get the most recent delivered message to this user
+        const lastDeliveredToUser = deliveredToUser[deliveredToUser.length - 1];
+        // Get the most recent message sent by this user
+        const lastSentByUser = sentByUser.length > 0 ? sentByUser[sentByUser.length - 1] : null;
+        
+        // If the last delivered message to user is newer than their last sent message, they should be able to reply
+        if (!lastSentByUser || lastDeliveredToUser.timestamp > lastSentByUser.timestamp) {
+            if (user.canSend === false) {
+                db.users[email].canSend = true;
+                await saveDB(db);
+                console.log(`Auto-fixed canSend for ${email}`);
+            }
+        }
+    }
 
     res.json({ messages });
 });
