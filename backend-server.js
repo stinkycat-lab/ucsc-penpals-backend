@@ -28,7 +28,7 @@ const DELIVERY_TIME_TEXT = "12 hours";
 
 // Inactivity reminder settings
 // How long without activity before sending a reminder (3 days)
-const INACTIVITY_THRESHOLD = 3 * 24 * 60 * 60 * 1000; // 3 days
+const INACTIVITY_THRESHOLD = 30 * 24 * 60 * 60 * 1000; // 3 days
 // How often to check for inactive users (check once per day)
 const REMINDER_CHECK_INTERVAL = 24 * 60 * 60 * 1000; // 24 hours
 // Minimum time between reminders to same user (7 days - don't spam them)
